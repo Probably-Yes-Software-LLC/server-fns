@@ -1,0 +1,21 @@
+[package]
+name = "server-fns-core"
+version = { workspace = true }
+edition = { workspace = true }
+
+[features]
+default = ["axum"]
+axum = ["dep:axum"]
+
+[dependencies]
+syn = { workspace = true, features = [
+    "parsing",
+    "derive",
+    "full",
+    "extra-traits",
+    "printing",
+] }
+proc-macro2 = { workspace = true }
+quote = { workspace = true }
+linkme = { workspace = true }
+axum = { workspace = true, optional = true }

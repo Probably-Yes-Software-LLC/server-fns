@@ -1,0 +1,26 @@
+[package]
+name = "server-fns"
+version = { workspace = true }
+edition = { workspace = true }
+
+[workspace]
+members = ["procm", "core"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+server-fns-core = { version = "0.1.0", path = "core" }
+server-fns-procm = { version = "0.1.0", path = "procm" }
+syn = "2.0.66"
+proc-macro2 = "1.0.85"
+quote = "1.0.36"
+linkme = "0.3.27"
+axum = { version = "0.7", default-features = false }
+
+[dependencies]
+server-fns-core = { workspace = true }
+server-fns-procm = { workspace = true }
+linkme = { workspace = true }
+axum = { workspace = true }
