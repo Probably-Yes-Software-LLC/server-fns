@@ -19,3 +19,5 @@ proc-macro2 = { workspace = true }
 quote = { workspace = true }
 linkme = { workspace = true }
 axum = { workspace = true, optional = true }
+deluxe = { workspace = true }
+derive-syn-parse = { workspace = true }

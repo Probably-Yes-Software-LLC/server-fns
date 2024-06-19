@@ -18,14 +18,14 @@ impl AttrMacro for ServerFnsAttr {
 
     fn transform2(
         args: Self::TokenStream,
-        body: Self::TokenStream,
+        body: Self::TokenStream
     ) -> Result<Self::TokenStream, Self::Error> {
-        let RouteMeta { path, method } = syn::parse2(args)?;
+        let RouteMeta { path, method } = deluxe::parse2(args)?;
         let ItemFn {
             mut attrs,
             vis,
             sig,
-            block,
+            block
         } = syn::parse2(body)?;
 
         let server_fn_ident = &sig.ident;
@@ -35,7 +35,9 @@ impl AttrMacro for ServerFnsAttr {
                 .replace('_', "-")
                 .to_lowercase()
         });
-        let method = method.unwrap_or_else(|| String::from("post"));
+        let method = method
+            .map(|m| m.to_lowercase())
+            .unwrap_or_else(|| String::from("post"));
 
         let middlewares = attrs.collect_middleware();
 
@@ -50,7 +52,7 @@ impl AttrMacro for ServerFnsAttr {
             attrs,
             vis,
             sig,
-            block,
+            block
         };
 
         Ok(quote! {

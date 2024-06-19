@@ -7,7 +7,7 @@ pub static COLLATED_ROUTES: [fn() -> Router];
 pub struct ServerFnsRouter;
 
 impl ServerFnsRouter {
-    pub fn new() -> Router {
+    pub fn collect_routes() -> Router {
         let mut router = Router::new();
 
         for route in COLLATED_ROUTES {
