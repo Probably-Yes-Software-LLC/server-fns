@@ -1,5 +1,15 @@
-use axum::response::Html;
+use axum::{extract::State, response::Html};
 use server_fns::{axum_router::ServerFnsRouter, server};
+
+#[derive(Debug, Default, Clone)]
+struct InnerState {
+    state: String,
+}
+
+#[derive(Debug, Default, Clone)]
+struct AppState {
+    inner: InnerState,
+}
 
 #[tokio::main]
 async fn main() {
@@ -7,13 +17,13 @@ async fn main() {
 }
 
 #[server(path = "/", method = "GET")]
-async fn index() -> Html<String> {
+async fn index(state: State<AppState>) -> Html<String> {
     let html = "<body>Index</body>";
-    Html(html)
+    Html(html.to_string())
 }
 
 #[server]
-pub async fn example() -> Result<(), ()> {
+pub async fn example(body: String) -> Result<(), ()> {
     // body
     Ok(())
 }

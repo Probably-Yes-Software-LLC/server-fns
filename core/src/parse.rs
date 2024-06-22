@@ -1,14 +1,36 @@
 use deluxe::ParseMetaItem;
 use derive_syn_parse::Parse;
+use proc_macro2::TokenStream;
+use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
-    Attribute, Error, Expr, Token
+    Attribute, Error, Expr, Ident, LitStr, Token,
 };
 
-#[derive(ParseMetaItem)]
 pub struct RouteMeta {
+    pub http_path: LitStr,
+    pub http_method: Ident,
+}
+
+#[derive(ParseMetaItem)]
+struct ServerFnsArgs {
     pub path: Option<String>,
-    pub method: Option<String>
+    pub method: Option<String>,
+}
+
+impl RouteMeta {
+    pub fn new(args: TokenStream, ident: &Ident) -> syn::Result<RouteMeta> {
+        let ServerFnsArgs { path, method } = deluxe::parse2(args)?;
+
+        Ok(Self {
+            http_path: path.or_else(|| format!("/api/{}", ident).replace('_', "-").to_lowercase()),
+            http_method: method
+                .as_deref()
+                .or(Some("post"))
+                .map(|m| format_ident!("{}", m.to_lowercase()))
+                .unwrap(),
+        })
+    }
 }
 
 #[derive(Parse)]

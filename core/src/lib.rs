@@ -8,7 +8,7 @@ pub use macro_traits::AttrMacro;
 use parse::{CollectMiddleware, RouteMeta};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
-use syn::{parse_quote, Expr, ItemFn, LitStr};
+use syn::{parse_quote, Expr, ItemFn, LitStr, Signature};
 
 pub struct ServerFnsAttr;
 
@@ -18,50 +18,75 @@ impl AttrMacro for ServerFnsAttr {
 
     fn transform2(
         args: Self::TokenStream,
-        body: Self::TokenStream
+        body: Self::TokenStream,
     ) -> Result<Self::TokenStream, Self::Error> {
-        let RouteMeta { path, method } = deluxe::parse2(args)?;
         let ItemFn {
             mut attrs,
             vis,
-            sig,
-            block
+            sig:
+                Signature {
+                    constness,
+                    asyncness,
+                    unsafety,
+                    abi,
+                    fn_token,
+                    ident,
+                    generics,
+                    paren_token,
+                    inputs,
+                    variadic,
+                    output,
+                },
+            block,
         } = syn::parse2(body)?;
-
-        let server_fn_ident = &sig.ident;
-
-        let path = path.unwrap_or_else(|| {
-            format!("/api/{}", server_fn_ident)
-                .replace('_', "-")
-                .to_lowercase()
-        });
-        let method = method
-            .map(|m| m.to_lowercase())
-            .unwrap_or_else(|| String::from("post"));
+        let RouteMeta {
+            http_path,
+            http_method,
+        } = RouteMeta::new(args, &ident)?;
 
         let middlewares = attrs.collect_middleware();
 
-        let method_fn = format_ident!("{method}");
-        let router_fn = format_ident!("{}_router", server_fn_ident);
-        let path_literal: LitStr = parse_quote! { #path };
+        let method_fn = format_ident!("{http_method}");
+        let router_fn = format_ident!("{}_router", ident);
+        let module = format_ident!("__{router_fn}");
+
+        let path_literal: LitStr = parse_quote! { #http_path };
         let method_expr: Expr = parse_quote! {
-            ::server_fns::axum::routing::#method_fn (#server_fn_ident)
+            ::server_fns::axum::routing::#method_fn (super::#ident)
         };
 
         let server_fn_body = ItemFn {
             attrs,
             vis,
-            sig,
-            block
+            sig: Signature {
+                constness,
+                asyncness,
+                unsafety,
+                abi,
+                fn_token,
+                ident,
+                generics,
+                paren_token,
+                inputs,
+                variadic,
+                output,
+            },
+            block,
         };
 
         Ok(quote! {
-            #[::server_fns::linkme::distributed_slice(::server_fns::axum_router::COLLATED_ROUTES)]
-            static ROUTE: fn() -> ::server_fns::axum::Router = #router_fn;
+            mod #module {
 
-            fn #router_fn () -> ::server_fns::axum::Router {
-                ::server_fns::axum::Router::new()
-                    .route(#path_literal, #method_expr)
+                #[::server_fns::linkme::distributed_slice(::server_fns::axum_router::COLLATED_ROUTES)]
+                static ROUTER: fn() -> ::server_fns::axum::Router = #router_fn;
+
+                fn #router_fn <State> (state: State) -> ::server_fns::axum::Router
+                where State: ::std::clone::Clone + ::std::marker::Send + ::std::marker::Sync + 'static
+                {
+                    ::server_fns::axum::Router::new()
+                        .route(#path_literal, #method_expr)
+                        .with_state(state)
+                }
             }
 
             #server_fn_body
