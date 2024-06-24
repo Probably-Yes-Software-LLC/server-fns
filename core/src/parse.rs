@@ -1,7 +1,9 @@
+use std::ops::Add;
+
 use deluxe::ParseMetaItem;
 use derive_syn_parse::Parse;
 use itertools::Itertools;
-use proc_macro2::TokenStream;
+use proc_macro2::{Span, TokenStream};
 use quote::format_ident;
 use syn::{
     parse::{Parse, ParseStream},
@@ -9,18 +11,19 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::Comma,
-    Attribute, Error, Expr, FnArg, Generics, Ident, LitStr, PatType, Token,
+    Attribute, Error, Expr, FnArg, GenericParam, Generics, Ident, LitStr, PatType, Token,
+    WhereClause, WherePredicate
 };
 
 pub struct RouteMeta {
     pub http_path: LitStr,
-    pub http_method: Ident,
+    pub http_method: Ident
 }
 
 #[derive(ParseMetaItem)]
 struct ServerFnsArgs {
     pub path: Option<String>,
-    pub method: Option<String>,
+    pub method: Option<String>
 }
 
 impl RouteMeta {
@@ -39,25 +42,31 @@ impl RouteMeta {
                 .as_deref()
                 .or(Some("post"))
                 .map(|m| format_ident!("{}", m.to_lowercase()))
-                .unwrap(),
+                .unwrap()
         })
     }
 }
 
 #[derive(Default)]
 pub struct HandlerArgs {
-    pub inner: Vec<FnArg>,
-    pub outer: Vec<OuterArg>,
+    pub inner: Punctuated<FnArg, Comma>,
+    pub outer: Vec<OuterArg>
 }
 
 pub struct OuterArg {
     pub arg: FnArg,
-    pub gen: Option<Generics>,
+    pub gen: Option<IntoGenerics>
+}
+
+#[derive(Clone)]
+pub struct IntoGenerics {
+    pub params: Punctuated<GenericParam, Comma>,
+    pub predicates: Punctuated<WherePredicate, Comma>
 }
 
 struct ArgGroup {
     inner: FnArg,
-    outer: OuterArg,
+    outer: OuterArg
 }
 
 impl TryFrom<Punctuated<FnArg, Comma>> for HandlerArgs {
@@ -79,6 +88,30 @@ impl HandlerArgs {
     }
 }
 
+impl Add for IntoGenerics {
+    type Output = Self;
+
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self.params.extend(rhs.params);
+        self.predicates.extend(rhs.predicates);
+        self
+    }
+}
+
+impl From<IntoGenerics> for Generics {
+    fn from(IntoGenerics { params, predicates }: IntoGenerics) -> Self {
+        Self {
+            lt_token: Some(parse_quote!(<)),
+            params,
+            gt_token: Some(parse_quote!(>)),
+            where_clause: Some(WhereClause {
+                where_token: parse_quote!(where),
+                predicates
+            })
+        }
+    }
+}
+
 impl TryFrom<(usize, FnArg)> for ArgGroup {
     type Error = syn::Error;
 
@@ -86,17 +119,14 @@ impl TryFrom<(usize, FnArg)> for ArgGroup {
         let state_attr = parse_quote!(#[state]);
 
         match fn_arg {
-            FnArg::Receiver(rec) => Err(Self::Error::new(
-                rec.span(),
-                "Reciever type 'self' not allowed in server functions.",
-            )),
+            FnArg::Receiver(rec) => Err(reciever_error(rec.span())),
             FnArg::Typed(
                 ref param @ PatType {
                     ref attrs,
                     ref pat,
                     ref ty,
                     ..
-                },
+                }
             ) if attrs.contains(&state_attr) => {
                 let generic_state = format_ident!("State{i}");
 
@@ -105,28 +135,33 @@ impl TryFrom<(usize, FnArg)> for ArgGroup {
                         arg: parse_quote_spanned! { param.span() =>
                             #(#attrs)* ::axum::extract::State(#pat): ::axum::extract::State<#ty>
                         },
-                        gen: Some(Generics {
+                        gen: Some(IntoGenerics {
                             params: parse_quote_spanned! { param.span() => #generic_state },
-                            where_clause: Some(parse_quote_spanned! { param.span() =>
-                                where
-                                    #ty: ::axum::extract::FromRef<#generic_state>,
-                                    #generic_state: ::std::marker::Send + ::std::marker::Sync
-                            }),
-                            ..Generics::default()
-                        }),
+                            predicates: parse_quote_spanned! { param.span() =>
+                                #ty: ::axum::extract::FromRef<#generic_state>,
+                                #generic_state: ::std::marker::Send + ::std::marker::Sync
+                            }
+                        })
                     },
-                    inner: parse_quote_spanned! { param.span() => #param },
+                    inner: parse_quote_spanned! { param.span() => #param }
                 })
             }
             param => Ok(ArgGroup {
                 inner: param.clone(),
                 outer: OuterArg {
                     arg: param,
-                    gen: None,
-                },
-            }),
+                    gen: None
+                }
+            })
         }
     }
+}
+
+pub fn reciever_error(span: Span) -> syn::Error {
+    syn::Error::new(
+        span,
+        "Reciever type 'self' is not supported in server functions"
+    )
 }
 
 #[derive(Parse)]
