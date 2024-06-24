@@ -17,7 +17,7 @@ async fn main() {
 }
 
 #[server(path = "/", method = "GET")]
-async fn index(state: State<AppState>) -> Html<String> {
+async fn index(#[state] state: AppState) -> Html<String> {
     let html = "<body>Index</body>";
     Html(html.to_string())
 }

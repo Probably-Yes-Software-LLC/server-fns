@@ -21,3 +21,4 @@ linkme = { workspace = true }
 axum = { workspace = true, optional = true }
 deluxe = { workspace = true }
 derive-syn-parse = { workspace = true }
+itertools = { workspace = true }
