@@ -1,3 +1,4 @@
+mod build;
 mod macro_traits;
 mod parse;
 
@@ -6,7 +7,7 @@ pub mod axum_router;
 
 use itertools::Itertools;
 pub use macro_traits::AttrMacro;
-use parse::{CollectMiddleware, HandlerArgs, OuterArg, RouteMeta};
+use parse::{CollectMiddleware, RouteMeta};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
@@ -14,10 +15,10 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Comma, Paren},
-    Attribute, Expr, FnArg, Generics, ItemFn, LitStr, PatType, Signature, Visibility
+    Expr, FnArg, Generics, ItemFn, Signature, Visibility
 };
 
-use crate::parse::{reciever_error, IntoGenerics};
+use crate::build::args::{reciever_error, HandlerArgs, IntoGenerics, OuterArg};
 
 pub struct ServerFnsAttr;
 
@@ -30,7 +31,7 @@ impl AttrMacro for ServerFnsAttr {
         body: Self::TokenStream
     ) -> Result<Self::TokenStream, Self::Error> {
         let ItemFn {
-            mut attrs,
+            attrs,
             vis,
             sig:
                 Signature {
@@ -91,17 +92,13 @@ impl AttrMacro for ServerFnsAttr {
             );
 
             let generics = generics.map(Generics::from).unwrap_or_default();
-            let inner_call_params = args
-                .clone()
-                .into_iter()
-                .map(|arg| match arg {
-                    FnArg::Receiver(rec) => Err(reciever_error(rec.span())),
-                    FnArg::Typed(param) => Ok(param.pat)
-                })
-                .fold_ok(Punctuated::<Expr, Comma>::new(), |mut params, next| {
+            let inner_call_params = args.clone().into_iter().map(|arg| arg.pat).fold(
+                Punctuated::<Expr, Comma>::new(),
+                |mut params, next| {
                     params.push(parse_quote!(#next));
                     params
-                })?;
+                }
+            );
 
             ItemFn {
                 attrs: vec![],
@@ -115,7 +112,7 @@ impl AttrMacro for ServerFnsAttr {
                     ident: ident.clone(),
                     generics,
                     paren_token: Paren::default(),
-                    inputs: args,
+                    inputs: args.into_iter().map_into::<FnArg>().collect(),
                     variadic: None,
                     output: output.clone()
                 },
