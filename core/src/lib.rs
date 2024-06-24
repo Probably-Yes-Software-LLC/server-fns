@@ -4,14 +4,13 @@ mod parse;
 #[cfg(feature = "axum")]
 pub mod axum_router;
 
-use itertools::Itertools;
 pub use macro_traits::AttrMacro;
 use parse::{CollectMiddleware, HandlerArgs, OuterArg, RouteMeta};
 use proc_macro2::TokenStream as TokenStream2;
 use quote::{format_ident, quote};
 use syn::{
     parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
-    Attribute, Expr, FnArg, Generics, ItemFn, LitStr, PatType, Signature,
+    Attribute, Expr, FnArg, Generics, ItemFn, LitStr, PatType, Signature
 };
 
 pub struct ServerFnsAttr;
@@ -22,7 +21,7 @@ impl AttrMacro for ServerFnsAttr {
 
     fn transform2(
         args: Self::TokenStream,
-        body: Self::TokenStream,
+        body: Self::TokenStream
     ) -> Result<Self::TokenStream, Self::Error> {
         let ItemFn {
             mut attrs,
@@ -39,14 +38,14 @@ impl AttrMacro for ServerFnsAttr {
                     paren_token,
                     inputs,
                     variadic,
-                    output,
+                    output
                 },
-            block,
+            block
         } = syn::parse2(body)?;
 
         let RouteMeta {
             http_path,
-            http_method,
+            http_method
         } = RouteMeta::parse(args, &ident)?;
 
         // let middlewares = attrs.collect_middleware();
@@ -68,17 +67,10 @@ impl AttrMacro for ServerFnsAttr {
         let outer_handler: ItemFn = {
             let (args, generics) = outer_inputs.into_iter().fold(
                 (Punctuated::<_, Comma>::new(), Generics::default()),
-                |(
-                    mut args,
-                    Generics {
-                        params,
-                        where_clause,
-                        ..
-                    },
-                ),
+                |(mut args, mut gens),
                  OuterArg {
                      arg: next_arg,
-                     gen: next_gen,
+                     gen: next_gen
                  }| {
                     args.push(next_arg);
 
@@ -88,14 +80,12 @@ impl AttrMacro for ServerFnsAttr {
                         ..
                     }) = next_gen
                     {
-                        let gen_params = params
-                            .into_iter()
-                            .chain(next_params)
-                            .collect::<Punctuated<_, Comma>>();
+                        gens.params.extend(next_params);
+                        // extend where clause
                     }
 
                     (args, gens)
-                },
+                }
             );
 
             parse_quote! {}
@@ -115,9 +105,9 @@ impl AttrMacro for ServerFnsAttr {
                 paren_token,
                 inputs: inner_inputs,
                 variadic,
-                output,
+                output
             },
-            block,
+            block
         };
 
         Ok(quote! {
