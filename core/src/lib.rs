@@ -1,5 +1,6 @@
 mod build;
 mod macro_traits;
+mod out;
 mod parse;
 
 #[cfg(feature = "axum")]
@@ -15,7 +16,7 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Comma, Paren},
-    Expr, FnArg, Generics, ItemFn, Signature, Visibility,
+    Expr, FnArg, Generics, ItemFn, Signature, Visibility
 };
 
 use crate::build::args::{reciever_error, Args, IntoGenerics, OuterArg};
@@ -28,7 +29,7 @@ impl AttrMacro for ServerFnsAttr {
 
     fn transform2(
         args: Self::TokenStream,
-        body: Self::TokenStream,
+        body: Self::TokenStream
     ) -> Result<Self::TokenStream, Self::Error> {
         let ItemFn {
             attrs,
@@ -45,14 +46,14 @@ impl AttrMacro for ServerFnsAttr {
                     paren_token,
                     inputs,
                     variadic,
-                    output,
+                    output
                 },
-            block,
+            block
         } = syn::parse2(body)?;
 
         let RouteMeta {
             http_path,
-            http_method,
+            http_method
         } = RouteMeta::parse(args, &ident)?;
 
         // let middlewares = attrs.collect_middleware();
@@ -61,7 +62,7 @@ impl AttrMacro for ServerFnsAttr {
             inner: inner_inputs,
             outer: outer_inputs,
             call: call_inner,
-            router: router_inputs,
+            router: router_inputs
         } = inputs.try_into()?;
 
         // Prepare output tokens
@@ -74,15 +75,13 @@ impl AttrMacro for ServerFnsAttr {
             ::server_fns::axum::routing::#http_method(#outer_handler_fn)
         };
 
-        // let router_fn: Ite
-
         let outer_handler: ItemFn = {
             let (args, generics) = outer_inputs.into_iter().fold(
                 (Punctuated::<_, Comma>::new(), Option::<IntoGenerics>::None),
                 |(mut args, mut gens),
                  OuterArg {
                      arg: next_arg,
-                     gen: next_gen,
+                     gen: next_gen
                  }| {
                     args.push(next_arg);
 
@@ -93,7 +92,7 @@ impl AttrMacro for ServerFnsAttr {
                     }
 
                     (args, gens)
-                },
+                }
             );
 
             let generics = generics.map(Generics::from).unwrap_or_default();
@@ -125,9 +124,9 @@ impl AttrMacro for ServerFnsAttr {
                 paren_token,
                 inputs: inner_inputs,
                 variadic,
-                output,
+                output
             },
-            block,
+            block
         };
 
         Ok(quote! {
