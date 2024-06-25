@@ -6,17 +6,19 @@ pub(crate) mod args {
     use quote::format_ident;
     use syn::{
         parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
-        FnArg, GenericParam, Generics, PatType, WhereClause, WherePredicate
+        Expr, ExprCall, FnArg, GenericParam, Generics, PatType, WhereClause, WherePredicate
     };
 
     pub type ArgList = Punctuated<FnArg, Comma>;
+    pub type ExprList = Punctuated<Expr, Comma>;
     pub type GenericsList = Punctuated<GenericParam, Comma>;
     pub type GenericConstraintsList = Punctuated<WherePredicate, Comma>;
 
     #[derive(Default)]
     pub struct HandlerArgs {
         pub inner: ArgList,
-        pub outer: Vec<OuterArg>
+        pub outer: Vec<OuterArg>,
+        pub call: ExprList
     }
 
     pub struct OuterArg {
@@ -32,7 +34,8 @@ pub(crate) mod args {
 
     struct ArgGroup {
         inner: PatType,
-        outer: OuterArg
+        outer: OuterArg,
+        call: Expr
     }
 
     impl TryFrom<Punctuated<FnArg, Comma>> for HandlerArgs {
@@ -54,6 +57,7 @@ pub(crate) mod args {
         fn add(mut self, rhs: ArgGroup) -> Self::Output {
             self.inner.push(rhs.inner.into());
             self.outer.push(rhs.outer);
+            self.call.push(rhs.call);
             self
         }
     }
@@ -87,6 +91,7 @@ pub(crate) mod args {
 
         fn try_from((i, fn_arg): (usize, FnArg)) -> Result<Self, Self::Error> {
             let state_attr = parse_quote!(#[state]);
+            let arg_num = format_ident!("arg{i}");
 
             match fn_arg {
                 FnArg::Receiver(rec) => Err(reciever_error(rec.span())),
@@ -94,12 +99,12 @@ pub(crate) mod args {
                     let generic_state = format_ident!("State{i}");
 
                     param.attrs.retain(|attr| attr != &state_attr);
-                    let PatType { attrs, pat, ty, .. } = &param;
+                    let PatType { attrs, ty, .. } = &param;
 
-                    Ok(ArgGroup {
+                    Ok(Self {
                         outer: OuterArg {
                             arg: parse_quote_spanned! { param.span() =>
-                                #(#attrs)* ::axum::extract::State(#pat): ::axum::extract::State<#ty>
+                                #(#attrs)* ::axum::extract::State(#arg_num): ::axum::extract::State<#ty>
                             },
                             gen: Some(IntoGenerics {
                                 params: parse_quote_spanned! { param.span() => #generic_state },
@@ -109,13 +114,20 @@ pub(crate) mod args {
                                 }
                             })
                         },
-                        inner: parse_quote_spanned! { param.span() => #param }
+                        inner: parse_quote_spanned! { param.span() => #param },
+                        call: parse_quote_spanned! { param.span() => #arg_num }
                     })
                 }
-                FnArg::Typed(param) => Ok(ArgGroup {
+                FnArg::Typed(param) => Ok(Self {
                     inner: param.clone(),
+                    call: parse_quote_spanned! { param.span() => #arg_num },
                     outer: OuterArg {
-                        arg: param,
+                        arg: PatType {
+                            pat: parse_quote_spanned! { param.span() => #arg_num },
+                            attrs: param.attrs,
+                            colon_token: param.colon_token,
+                            ty: param.ty
+                        },
                         gen: None
                     }
                 })

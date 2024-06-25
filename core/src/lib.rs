@@ -59,16 +59,18 @@ impl AttrMacro for ServerFnsAttr {
 
         let HandlerArgs {
             inner: inner_inputs,
-            outer: outer_inputs
+            outer: outer_inputs,
+            call: call_inner
         } = inputs.try_into()?;
 
         // Prepare output tokens
 
-        let router_fn = format_ident!("{}_router", ident);
+        let router_fn = format_ident!("{ident}_router");
         let module = format_ident!("__{router_fn}");
+        let outer_handler_fn = format_ident!("{http_method}_{ident}");
 
         let handler_expr: Expr = parse_quote! {
-            ::server_fns::axum::routing::#http_method (#ident)
+            ::server_fns::axum::routing::#http_method (#outer_handler_fn)
         };
 
         let outer_handler: ItemFn = {
@@ -92,13 +94,6 @@ impl AttrMacro for ServerFnsAttr {
             );
 
             let generics = generics.map(Generics::from).unwrap_or_default();
-            let inner_call_params = args.clone().into_iter().map(|arg| arg.pat).fold(
-                Punctuated::<Expr, Comma>::new(),
-                |mut params, next| {
-                    params.push(parse_quote!(#next));
-                    params
-                }
-            );
 
             ItemFn {
                 attrs: vec![],
@@ -109,16 +104,16 @@ impl AttrMacro for ServerFnsAttr {
                     unsafety: None,
                     abi: None,
                     fn_token: parse_quote!(fn),
-                    ident: ident.clone(),
+                    ident: parse_quote!(#outer_handler_fn),
                     generics,
                     paren_token: Paren::default(),
                     inputs: args.into_iter().map_into::<FnArg>().collect(),
                     variadic: None,
                     output: output.clone()
                 },
-                block: Box::new(parse_quote! {{
-                    super::#ident (#inner_call_params).await
-                }})
+                block: parse_quote! {{
+                    super::#ident (#call_inner).await
+                }}
             }
         };
 
@@ -143,6 +138,7 @@ impl AttrMacro for ServerFnsAttr {
 
         Ok(quote! {
             mod #module {
+                use super::*;
 
                 #[::server_fns::linkme::distributed_slice(::server_fns::axum_router::COLLATED_ROUTES)]
                 static ROUTER: fn() -> ::server_fns::axum::Router = #router_fn;
