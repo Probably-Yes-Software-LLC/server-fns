@@ -3,12 +3,12 @@ use server_fns::{axum_router::ServerFnsRouter, server};
 
 #[derive(Debug, Default, Clone)]
 struct InnerState {
-    state: String
+    state: String,
 }
 
 #[derive(Debug, Default, Clone)]
 struct AppState {
-    inner: InnerState
+    inner: InnerState,
 }
 
 #[tokio::main]
