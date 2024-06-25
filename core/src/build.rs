@@ -6,7 +6,7 @@ pub(crate) mod args {
     use quote::format_ident;
     use syn::{
         parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
-        Expr, ExprCall, FnArg, GenericParam, Generics, PatType, WhereClause, WherePredicate
+        Expr, ExprCall, FnArg, GenericParam, Generics, PatType, WhereClause, WherePredicate,
     };
 
     pub type ArgList = Punctuated<FnArg, Comma>;
@@ -15,30 +15,42 @@ pub(crate) mod args {
     pub type GenericConstraintsList = Punctuated<WherePredicate, Comma>;
 
     #[derive(Default)]
-    pub struct HandlerArgs {
+    pub struct Args {
         pub inner: ArgList,
         pub outer: Vec<OuterArg>,
-        pub call: ExprList
+        pub call: ExprList,
+        pub router: Vec<RouterArg>,
     }
 
     pub struct OuterArg {
         pub arg: PatType,
-        pub gen: Option<IntoGenerics>
+        pub gen: Option<IntoGenerics>,
+    }
+
+    pub struct RouterArg {
+        pub state: StateArg,
+        pub call: Expr,
+    }
+
+    pub struct StateArg {
+        pub arg: PatType,
+        pub gen: IntoGenerics,
     }
 
     #[derive(Clone)]
     pub struct IntoGenerics {
         pub params: GenericsList,
-        pub predicates: GenericConstraintsList
+        pub predicates: GenericConstraintsList,
     }
 
     struct ArgGroup {
         inner: PatType,
         outer: OuterArg,
-        call: Expr
+        call: Expr,
+        router: Option<RouterArg>,
     }
 
-    impl TryFrom<Punctuated<FnArg, Comma>> for HandlerArgs {
+    impl TryFrom<Punctuated<FnArg, Comma>> for Args {
         type Error = syn::Error;
 
         /// Build [HandlerArgs] from the main annotated function's argument list.
@@ -46,11 +58,11 @@ pub(crate) mod args {
             args.into_iter()
                 .enumerate()
                 .map(ArgGroup::try_from)
-                .fold_ok(HandlerArgs::default(), HandlerArgs::add)
+                .fold_ok(Args::default(), Args::add)
         }
     }
 
-    impl Add<ArgGroup> for HandlerArgs {
+    impl Add<ArgGroup> for Args {
         type Output = Self;
 
         /// Append [ArgGroup]s onto the end of the respective argument lists.
@@ -58,6 +70,11 @@ pub(crate) mod args {
             self.inner.push(rhs.inner.into());
             self.outer.push(rhs.outer);
             self.call.push(rhs.call);
+
+            if let Some(router) = rhs.router {
+                self.router.push(router);
+            }
+
             self
         }
     }
@@ -80,8 +97,8 @@ pub(crate) mod args {
                 gt_token: Some(parse_quote!(>)),
                 where_clause: Some(WhereClause {
                     where_token: parse_quote!(where),
-                    predicates
-                })
+                    predicates,
+                }),
             }
         }
     }
@@ -97,25 +114,35 @@ pub(crate) mod args {
                 FnArg::Receiver(rec) => Err(reciever_error(rec.span())),
                 FnArg::Typed(mut param) if param.attrs.contains(&state_attr) => {
                     let generic_state = format_ident!("State{i}");
+                    let state_num = format_ident!("state{i}");
 
                     param.attrs.retain(|attr| attr != &state_attr);
-                    let PatType { attrs, ty, .. } = &param;
+                    let ty = &param.ty;
+
+                    let state_generics = IntoGenerics {
+                        params: parse_quote_spanned! { param.span() => #generic_state },
+                        predicates: parse_quote_spanned! { param.span() =>
+                            #ty: ::axum::extract::FromRef<#generic_state>,
+                            #generic_state: ::std::marker::Send + ::std::marker::Sync
+                        },
+                    };
 
                     Ok(Self {
                         outer: OuterArg {
                             arg: parse_quote_spanned! { param.span() =>
-                                #(#attrs)* ::axum::extract::State(#arg_num): ::axum::extract::State<#ty>
+                                ::axum::extract::State(#arg_num): ::axum::extract::State<#ty>
                             },
-                            gen: Some(IntoGenerics {
-                                params: parse_quote_spanned! { param.span() => #generic_state },
-                                predicates: parse_quote_spanned! { param.span() =>
-                                    #ty: ::axum::extract::FromRef<#generic_state>,
-                                    #generic_state: ::std::marker::Send + ::std::marker::Sync
-                                }
-                            })
+                            gen: Some(state_generics.clone()),
                         },
                         inner: parse_quote_spanned! { param.span() => #param },
-                        call: parse_quote_spanned! { param.span() => #arg_num }
+                        call: parse_quote_spanned! { param.span() => #arg_num },
+                        router: Some(RouterArg {
+                            state: StateArg {
+                                arg: parse_quote_spanned! { param.span() => #state_num: #generic_state },
+                                gen: state_generics,
+                            },
+                            call: parse_quote_spanned! { param.span() => #state_num },
+                        }),
                     })
                 }
                 FnArg::Typed(param) => Ok(Self {
@@ -126,11 +153,12 @@ pub(crate) mod args {
                             pat: parse_quote_spanned! { param.span() => #arg_num },
                             attrs: param.attrs,
                             colon_token: param.colon_token,
-                            ty: param.ty
+                            ty: param.ty,
                         },
-                        gen: None
-                    }
-                })
+                        gen: None,
+                    },
+                    router: None,
+                }),
             }
         }
     }
@@ -138,7 +166,7 @@ pub(crate) mod args {
     pub fn reciever_error(span: Span) -> syn::Error {
         syn::Error::new(
             span,
-            "Reciever type 'self' is not supported in server functions."
+            "Reciever type 'self' is not supported in server functions.",
         )
     }
 }

@@ -15,10 +15,10 @@ use syn::{
     punctuated::Punctuated,
     spanned::Spanned,
     token::{Comma, Paren},
-    Expr, FnArg, Generics, ItemFn, Signature, Visibility
+    Expr, FnArg, Generics, ItemFn, Signature, Visibility,
 };
 
-use crate::build::args::{reciever_error, HandlerArgs, IntoGenerics, OuterArg};
+use crate::build::args::{reciever_error, Args, IntoGenerics, OuterArg};
 
 pub struct ServerFnsAttr;
 
@@ -28,7 +28,7 @@ impl AttrMacro for ServerFnsAttr {
 
     fn transform2(
         args: Self::TokenStream,
-        body: Self::TokenStream
+        body: Self::TokenStream,
     ) -> Result<Self::TokenStream, Self::Error> {
         let ItemFn {
             attrs,
@@ -45,22 +45,23 @@ impl AttrMacro for ServerFnsAttr {
                     paren_token,
                     inputs,
                     variadic,
-                    output
+                    output,
                 },
-            block
+            block,
         } = syn::parse2(body)?;
 
         let RouteMeta {
             http_path,
-            http_method
+            http_method,
         } = RouteMeta::parse(args, &ident)?;
 
         // let middlewares = attrs.collect_middleware();
 
-        let HandlerArgs {
+        let Args {
             inner: inner_inputs,
             outer: outer_inputs,
-            call: call_inner
+            call: call_inner,
+            router: router_inputs,
         } = inputs.try_into()?;
 
         // Prepare output tokens
@@ -70,8 +71,10 @@ impl AttrMacro for ServerFnsAttr {
         let outer_handler_fn = format_ident!("{http_method}_{ident}");
 
         let handler_expr: Expr = parse_quote! {
-            ::server_fns::axum::routing::#http_method (#outer_handler_fn)
+            ::server_fns::axum::routing::#http_method(#outer_handler_fn)
         };
+
+        // let router_fn: Ite
 
         let outer_handler: ItemFn = {
             let (args, generics) = outer_inputs.into_iter().fold(
@@ -79,7 +82,7 @@ impl AttrMacro for ServerFnsAttr {
                 |(mut args, mut gens),
                  OuterArg {
                      arg: next_arg,
-                     gen: next_gen
+                     gen: next_gen,
                  }| {
                     args.push(next_arg);
 
@@ -90,30 +93,21 @@ impl AttrMacro for ServerFnsAttr {
                     }
 
                     (args, gens)
-                }
+                },
             );
 
             let generics = generics.map(Generics::from).unwrap_or_default();
+            let (_, type_gens, where_gens, ..) = generics.split_for_impl();
 
-            ItemFn {
-                attrs: vec![],
-                vis: Visibility::Inherited,
-                sig: Signature {
-                    constness: None,
-                    asyncness: Some(parse_quote!(async)),
-                    unsafety: None,
-                    abi: None,
-                    fn_token: parse_quote!(fn),
-                    ident: parse_quote!(#outer_handler_fn),
-                    generics,
-                    paren_token: Paren::default(),
-                    inputs: args.into_iter().map_into::<FnArg>().collect(),
-                    variadic: None,
-                    output: output.clone()
-                },
-                block: parse_quote! {{
-                    super::#ident (#call_inner).await
-                }}
+            let inputs = args
+                .into_iter()
+                .map_into::<FnArg>()
+                .collect::<Punctuated<_, Comma>>();
+
+            parse_quote! {
+                async fn #outer_handler_fn #type_gens (#inputs) #output #where_gens {
+                    #ident(#call_inner).await
+                }
             }
         };
 
@@ -131,9 +125,9 @@ impl AttrMacro for ServerFnsAttr {
                 paren_token,
                 inputs: inner_inputs,
                 variadic,
-                output
+                output,
             },
-            block
+            block,
         };
 
         Ok(quote! {
