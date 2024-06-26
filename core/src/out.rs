@@ -2,9 +2,15 @@ use itertools::Itertools;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
-    parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
-    Block, Expr, FnArg, Generics, Ident, ItemFn, PatType, ReturnType, TypeGenerics, WhereClause
+    parse_quote, parse_quote_spanned,
+    punctuated::Punctuated,
+    spanned::Spanned,
+    token::{Comma, Gt, Lt},
+    Block, Expr, FnArg, Generics, Ident, ItemFn, PatType, ReturnType, Type, TypeGenerics,
+    WherePredicate
 };
+
+use crate::parse::RouteMeta;
 
 pub struct ServerFn {
     pub span: Span,
@@ -40,12 +46,13 @@ mod server_fn {
     use super::*;
 
     impl ServerFn {
-        pub fn try_new(server_fn: ItemFn) -> Result<Self, syn::Error> {
+        pub fn try_new(meta: RouteMeta, server_fn: ItemFn) -> Result<Self, syn::Error> {
             let span = server_fn.span();
             let fn_ident = &server_fn.sig.ident;
 
             let router_fn = format_ident!("{fn_ident}_router");
             let router_mod = format_ident!("__{router_fn}");
+            let stateful_handler_fn = format_ident!("{}_{fn_ident}", meta.http_method);
 
             let args_span = server_fn.sig.inputs.span();
             let input_args = server_fn
@@ -66,7 +73,13 @@ mod server_fn {
                 .into_iter()
                 .enumerate();
 
-            let router_fn = RouterFn::try_new(args_span, router_fn, input_args)?;
+            let router_fn = RouterFn::try_new(
+                args_span,
+                router_fn,
+                input_args,
+                &meta.http_path,
+                &stateful_handler_fn
+            )?;
             let stateful_handler = StatefulHandler::try_new()?;
             let inner_handler = InnerHandler::try_new(server_fn)?;
 
@@ -104,8 +117,7 @@ mod server_fn {
 }
 
 mod router_fn {
-
-    use syn::WherePredicate;
+    use syn::LitStr;
 
     use super::*;
 
@@ -113,9 +125,11 @@ mod router_fn {
         pub fn try_new<'a>(
             span: Span,
             ident: Ident,
-            inputs: impl IntoIterator<Item = (usize, &'a PatType)>
+            inputs: impl IntoIterator<Item = (usize, &'a PatType)>,
+            http_path: &LitStr,
+            stateful_handler_ident: &Ident
         ) -> Result<Self, syn::Error> {
-            // Assemble generics and arguments.
+            /// Assemble generics, arguments, and [axum::Router::with_state()] parameters.
             #[derive(Default)]
             struct BuildArgs {
                 gens: Generics,
@@ -135,50 +149,55 @@ mod router_fn {
                     if next.attrs.contains(&state_attr) {
                         let next_span = next.span();
                         let next_type = &next.ty;
+
                         let state_type = format_ident!("State{i}");
                         let state_arg = format_ident!("state{i}");
 
-                        build_args
-                            .gens
-                            .lt_token
-                            .get_or_insert_with(|| parse_quote_spanned! { next_span => < });
-                        build_args
-                            .gens
-                            .gt_token
-                            .get_or_insert_with(|| parse_quote_spanned! { next_span => >});
-                        build_args
-                            .gens
-                            .params
-                            .push(parse_quote_spanned! { next_span => #state_type});
-                        build_args
-                            .gens
-                            .make_where_clause()
-                            .predicates
-                            .extend::<Punctuated<WherePredicate, Comma>>(
-                                parse_quote_spanned! { next_span =>
-                                    #next_type: ::server_fns::axum::extract::FromRef<#state_type>,
-                                    #state_type: ::std::marker::Send + ::std::marker::Sync
-                                }
-                            );
+                        let BuildArgs {
+                            ref mut gens,
+                            ref mut args,
+                            ref mut state_args
+                        } = build_args;
 
-                        build_args.args.push(parse_quote_spanned! { next_span =>
+                        if gens.lt_token.is_none() {
+                            gens.lt_token = Some(Lt::default());
+                        }
+                        if gens.gt_token.is_none() {
+                            gens.gt_token = Some(Gt::default());
+                        }
+
+                        gens.params
+                            .push(parse_quote_spanned! { next_span => #state_type});
+                        gens.make_where_clause().predicates.extend(
+                            StatefulHandler::make_where_predicates(
+                                next_span,
+                                &next_type,
+                                &state_type
+                            )
+                        );
+
+                        args.push(parse_quote_spanned! { next_span =>
                             #state_arg: #state_type
                         });
 
-                        build_args
-                            .state_args
-                            .push(parse_quote_spanned! { next_span => #state_arg });
+                        state_args.push(parse_quote_spanned! { next_span => #state_arg });
                     }
 
                     build_args
                 });
 
+            let block = parse_quote! {{
+                ::server_fns::axum::Router::new()
+                    .route(#http_path, #stateful_handler_ident)
+                    #(.with_state(#state_args))*
+            }};
+
             Ok(Self {
                 span,
                 ident,
-                gens: todo!(),
-                args: todo!(),
-                block: todo!()
+                gens,
+                args,
+                block
             })
         }
     }
@@ -205,7 +224,37 @@ mod router_fn {
 }
 
 mod stateful_handler {
+
     use super::*;
+
+    impl StatefulHandler {
+        pub fn make_where_predicates(
+            span: Span,
+            arg_type: &Type,
+            state_type: &Ident
+        ) -> Punctuated<WherePredicate, Comma> {
+            parse_quote_spanned! { span =>
+                #arg_type: ::server_fns::axum::extract::FromRef<#state_type>,
+                #state_type: ::std::marker::Send + ::std::marker::Sync
+            }
+        }
+
+        pub fn try_new<'a>(
+            span: Span,
+            ident: Ident,
+            inputs: impl IntoIterator<Item = (usize, &'a PatType)>,
+            handler_fn_ident: &Ident
+        ) -> Result<Self, syn::Error> {
+            Ok(Self {
+                span,
+                ident,
+                gens: todo!(),
+                args: todo!(),
+                output: todo!(),
+                block: todo!()
+            })
+        }
+    }
 
     impl ToTokens for StatefulHandler {
         fn to_tokens(&self, tokens: &mut TokenStream2) {
