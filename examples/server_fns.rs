@@ -23,7 +23,7 @@ async fn index(#[state] AppState { inner }: AppState, body: String) -> Html<Stri
 }
 
 #[server]
-pub async fn example(body: String) -> Result<(), ()> {
+pub async fn example(#[state] inner_state: InnerState, body: String) -> Result<(), ()> {
     // body
     Ok(())
 }
