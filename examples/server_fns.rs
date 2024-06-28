@@ -1,12 +1,5 @@
-use std::any::Any;
-
-use axum::{
-    extract::{FromRef, State},
-    response::Html,
-    routing::get,
-    Router
-};
-use server_fns::{router::RouterFn, server, server_state::ServerState, ServerState};
+use axum::{extract::FromRef, response::Html};
+use server_fns::{server, server_state::ServerState, ServerState};
 
 #[derive(Debug, Default, Clone)]
 pub struct InnerState {

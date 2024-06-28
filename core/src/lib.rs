@@ -1,9 +1,8 @@
 mod macro_traits;
 mod parse;
 mod server_fn;
+pub mod server_router;
 pub mod server_state;
-
-pub mod router;
 
 use std::env;
 
