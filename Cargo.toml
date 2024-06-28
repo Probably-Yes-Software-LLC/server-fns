@@ -16,20 +16,22 @@ server-fns-procm = { version = "0.1.0", path = "procm" }
 syn = "2.0.66"
 proc-macro2 = "1.0.85"
 quote = "1.0.36"
-linkme = "0.3.27"
+inventory = "0.3.15"
 axum = { version = "0.7", default-features = false }
 tower = "0.4.13"
 tokio = "1.38"
 deluxe = "0.5.0"
 derive-syn-parse = "0.2.0"
 itertools = "0.13.0"
+convert_case = "0.6.0"
 
 [dependencies]
 server-fns-core = { workspace = true }
 server-fns-procm = { workspace = true }
-linkme = { workspace = true }
 axum = { workspace = true }
+inventory = { workspace = true }
 
 [dev-dependencies]
+axum = {workspace = true, features = ["tokio", "http2"], default-features = true }
 tower = { workspace = true }
 tokio = { workspace = true, features = ["full"] }

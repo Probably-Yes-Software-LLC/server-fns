@@ -3,10 +3,6 @@ name = "server-fns-core"
 version = { workspace = true }
 edition = { workspace = true }
 
-[features]
-default = ["axum"]
-axum = ["dep:axum"]
-
 [dependencies]
 syn = { workspace = true, features = [
     "parsing",
@@ -17,8 +13,9 @@ syn = { workspace = true, features = [
 ] }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
-linkme = { workspace = true }
-axum = { workspace = true, optional = true }
+inventory = { workspace = true }
+axum = { workspace = true }
 deluxe = { workspace = true }
 derive-syn-parse = { workspace = true }
 itertools = { workspace = true }
+convert_case = { workspace = true }

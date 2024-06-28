@@ -1,13 +1,9 @@
-use itertools::Itertools;
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
-    parse_quote, parse_quote_spanned,
-    punctuated::Punctuated,
-    spanned::Spanned,
-    token::{Comma, Gt, Lt},
-    Attribute, Block, Expr, FnArg, Generics, Ident, ItemFn, PatType, Receiver, ReturnType, Type,
-    WherePredicate
+    parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
+    Attribute, Block, Expr, FnArg, Generics, Ident, ItemFn, LitStr, PatType, Receiver, ReturnType,
+    Token, Type, WherePredicate
 };
 
 use crate::parse::RouteMeta;
@@ -24,14 +20,14 @@ pub struct RouterFn {
     pub span: Span,
     pub ident: Ident,
     pub gens: Generics,
-    pub args: Punctuated<FnArg, Comma>,
-    pub block: Block
+    pub output: ReturnType,
+    pub block: Block,
+    pub register_route: Expr
 }
 
 pub struct StatefulHandler {
     pub span: Span,
     pub ident: Ident,
-    pub gens: Generics,
     pub args: Punctuated<FnArg, Comma>,
     pub output: ReturnType,
     pub block: Block
@@ -53,18 +49,13 @@ fn state_attr() -> Attribute {
     parse_quote!(#[state])
 }
 
-fn make_where_predicates(
-    span: Span,
-    arg_type: &Type,
-    state_type: &Ident
-) -> Punctuated<WherePredicate, Comma> {
+fn make_where_predicate(span: Span, arg_type: &Type) -> WherePredicate {
     parse_quote_spanned! { span =>
-        #arg_type: ::server_fns::axum::extract::FromRef<#state_type>,
-        #state_type: ::std::clone::Clone + ::std::marker::Send + ::std::marker::Sync + 'static
+        #arg_type: ::server_fns::axum::extract::FromRef<State>
     }
 }
 
-mod server_fn {
+mod server_fn_impl {
     use super::*;
 
     impl ServerFn {
@@ -77,12 +68,9 @@ mod server_fn {
                 http_method
             } = meta;
 
-            let router_fn = format_ident!("{fn_ident}_router");
-            let router_mod = format_ident!("__{router_fn}");
-            let stateful_handler_fn = format_ident!("{}_{fn_ident}", http_method);
-            let route_expr = parse_quote_spanned! { span =>
-                ::server_fns::axum::routing::#http_method(#stateful_handler_fn)
-            };
+            let router_fn_ident = format_ident!("{fn_ident}_router");
+            let router_mod_ident = format_ident!("__{router_fn_ident}");
+            let stateful_fn_ident = format_ident!("{}_{fn_ident}", http_method);
 
             let args_span = server_fn.sig.inputs.span();
             let input_args = server_fn
@@ -93,23 +81,19 @@ mod server_fn {
                     FnArg::Receiver(rec) => Err(reciever_error(rec)),
                     FnArg::Typed(typ) => Ok(typ)
                 })
-                .fold_ok(vec![], |mut args, next| {
-                    args.push(next);
-                    args
-                })?
-                .into_iter()
-                .enumerate();
+                .collect::<Result<Vec<_>, _>>()?;
 
             let router_fn = RouterFn::try_new(
                 args_span,
-                router_fn,
+                router_fn_ident,
                 input_args.clone(),
                 http_path,
-                route_expr
+                http_method,
+                &stateful_fn_ident
             )?;
             let stateful_handler = StatefulHandler::try_new(
                 args_span,
-                stateful_handler_fn,
+                stateful_fn_ident,
                 input_args,
                 &server_fn.sig.output,
                 fn_ident
@@ -118,7 +102,7 @@ mod server_fn {
 
             Ok(Self {
                 span,
-                router_mod,
+                router_mod: router_mod_ident,
                 router_fn,
                 stateful_handler,
                 inner_handler
@@ -137,7 +121,7 @@ mod server_fn {
             } = self;
 
             tokens.append_all(quote_spanned! { *span =>
-                mod #router_mod {
+                pub mod #router_mod {
                     use super::*;
 
                     #router_fn
@@ -150,81 +134,68 @@ mod server_fn {
 }
 
 mod router_fn {
-    use syn::LitStr;
-
     use super::*;
+    use crate::{current_package, make_router};
 
     impl RouterFn {
         pub fn try_new<'a>(
             span: Span,
             ident: Ident,
-            inputs: impl IntoIterator<Item = (usize, &'a PatType)>,
+            inputs: impl IntoIterator<Item = &'a PatType>,
             http_path: LitStr,
-            route_expr: Expr
+            http_method: Ident,
+            handler_ident: &Ident
         ) -> Result<Self, syn::Error> {
-            #[derive(Default)]
-            struct BuildArgs {
-                gens: Generics,
-                args: Punctuated<FnArg, Comma>,
-                state_args: Vec<Expr>
-            }
-
             let state_attr = state_attr();
-            let mut build_args = BuildArgs::default();
 
-            for (i, next) in inputs {
+            let mut gens = Generics {
+                lt_token: Some(<Token![<]>::default()),
+                gt_token: Some(<Token![>]>::default()),
+                params: parse_quote_spanned! { span => State },
+                where_clause: parse_quote_spanned! { span =>
+                    where
+                        State: ::std::clone::Clone +
+                                ::std::marker::Send +
+                                ::std::marker::Sync +
+                                'static
+
+                }
+            };
+
+            for next in inputs {
                 if next.attrs.contains(&state_attr) {
                     let next_span = next.span();
-                    let next_type = &next.ty;
+                    let next_pred = make_where_predicate(next_span, &next.ty);
 
-                    let state_type = format_ident!("State{i}");
-                    let state_arg = format_ident!("state{i}");
-
-                    let BuildArgs {
-                        ref mut gens,
-                        ref mut args,
-                        ref mut state_args
-                    } = build_args;
-
-                    if gens.lt_token.is_none() {
-                        gens.lt_token = Some(Lt::default());
-                    }
-                    if gens.gt_token.is_none() {
-                        gens.gt_token = Some(Gt::default());
-                    }
-
-                    gens.params
-                        .push(parse_quote_spanned! { next_span => #state_type});
-                    gens.make_where_clause()
-                        .predicates
-                        .extend(make_where_predicates(next_span, next_type, &state_type));
-
-                    args.push(parse_quote_spanned! { next_span =>
-                        #state_arg: #state_type
-                    });
-
-                    state_args.push(parse_quote_spanned! { next_span => #state_arg });
+                    gens.make_where_clause().predicates.push(next_pred);
                 }
             }
 
-            let BuildArgs {
-                gens,
-                args,
-                state_args
-            } = build_args;
+            let output = parse_quote_spanned! { span =>
+                -> ::server_fns::axum::Router<State>
+            };
 
             let block = parse_quote_spanned! { span => {
-                ::server_fns::axum::Router::new()
-                    .route(#http_path, #route_expr)
-                    #(.with_state(#state_args))*
+                ::server_fns::axum::Router::new().route(
+                    #http_path,
+                    ::server_fns::axum::routing::#http_method(#handler_ident)
+                )
             }};
+
+            let pkg_router_ident = make_router(current_package(span)?);
+            let register_route = parse_quote_spanned! { span =>
+                ::server_fns::inventory::submit! {
+                    #pkg_router_ident::register(#http_path, #ident)
+                }
+            };
 
             Ok(Self {
                 span,
                 ident,
                 gens,
-                args,
-                block
+                output,
+                block,
+                register_route
             })
         }
     }
@@ -235,16 +206,19 @@ mod router_fn {
                 span,
                 ident,
                 gens,
-                args,
-                block
+                output,
+                block,
+                register_route
             } = self;
 
             let (_, gen_types, where_clause) = gens.split_for_impl();
 
             tokens.append_all(quote_spanned! { *span =>
-                fn #ident #gen_types (#args) -> ::server_fns::axum::Router
+                pub fn #ident #gen_types () #output
                 #where_clause
                 #block
+
+                #register_route
             });
         }
     }
@@ -257,13 +231,12 @@ mod stateful_handler {
         pub fn try_new<'a>(
             span: Span,
             ident: Ident,
-            inputs: impl IntoIterator<Item = (usize, &'a PatType)>,
+            inputs: impl IntoIterator<Item = &'a PatType>,
             output: &ReturnType,
             handler_fn_ident: &Ident
         ) -> Result<Self, syn::Error> {
             #[derive(Default)]
             struct BuildArgs {
-                gens: Generics,
                 args: Punctuated<FnArg, Comma>,
                 handler_args: Punctuated<Expr, Comma>
             }
@@ -271,49 +244,31 @@ mod stateful_handler {
             let state_attr = state_attr();
             let mut build_args = BuildArgs::default();
 
+            let inputs = inputs.into_iter().enumerate();
+
             for (i, next) in inputs {
                 let next_span = next.span();
                 let next_type = &next.ty;
                 let arg_ident = format_ident!("arg{i}");
 
                 let BuildArgs {
-                    ref mut gens,
                     ref mut args,
                     ref mut handler_args
                 } = build_args;
 
-                if next.attrs.contains(&state_attr) {
-                    let state_type = format_ident!("State{i}");
-
-                    if gens.lt_token.is_none() {
-                        gens.lt_token = Some(Lt::default());
-                    }
-                    if gens.gt_token.is_none() {
-                        gens.gt_token = Some(Gt::default());
-                    }
-
-                    gens.params
-                        .push(parse_quote_spanned! { next_span => #state_type});
-                    gens.make_where_clause()
-                        .predicates
-                        .extend(make_where_predicates(next_span, next_type, &state_type));
-
-                    args.push(parse_quote_spanned! { next_span =>
+                args.push(if next.attrs.contains(&state_attr) {
+                    parse_quote_spanned! { next_span =>
                         ::server_fns::axum::extract::State(#arg_ident):
                             ::server_fns::axum::extract::State<#next_type>
-                    });
+                    }
                 } else {
-                    args.push(parse_quote_spanned! { next_span => #arg_ident: #next_type });
-                }
+                    parse_quote_spanned! { next_span => #arg_ident: #next_type }
+                });
 
                 handler_args.push(parse_quote_spanned! { next_span => #arg_ident });
             }
 
-            let BuildArgs {
-                gens,
-                args,
-                handler_args
-            } = build_args;
+            let BuildArgs { args, handler_args } = build_args;
 
             let block = parse_quote_spanned! { span => {
                 #handler_fn_ident(#handler_args).await
@@ -322,7 +277,6 @@ mod stateful_handler {
             Ok(Self {
                 span,
                 ident,
-                gens,
                 args,
                 output: output.clone(),
                 block
@@ -335,19 +289,13 @@ mod stateful_handler {
             let Self {
                 span,
                 ident,
-                gens,
                 args,
                 output,
                 block
             } = self;
 
-            let (_, gen_types, where_clause) = gens.split_for_impl();
-
-            tokens.append_all(quote_spanned! { *span =>
-                async fn #ident #gen_types (#args) #output
-                #where_clause
-                #block
-            });
+            tokens
+                .append_all(quote_spanned! { *span => pub async fn #ident (#args) #output #block });
         }
     }
 }
