@@ -1,4 +1,5 @@
 mod macro_traits;
+pub mod middleware;
 mod parse;
 mod server_fn;
 pub mod server_router;
@@ -13,7 +14,7 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote};
 use syn::{Ident, ItemFn, ItemStruct};
 
-use crate::{server_fn::ServerFn, server_state::ServerStateImpl};
+use crate::{middleware::MiddlewareImpl, server_fn::ServerFn, server_state::ServerStateImpl};
 
 pub struct ServerFnsAttr;
 
@@ -30,6 +31,23 @@ impl AttrMacro for ServerFnsAttr {
         let server_fn = ServerFn::try_new(meta, annotated_fn)?;
 
         Ok(quote!(#server_fn))
+    }
+}
+
+pub struct MiddlewareAttr;
+
+impl AttrMacro for MiddlewareAttr {
+    type TokenStream = TokenStream2;
+    type Error = syn::Error;
+
+    fn transform2(
+        args: Self::TokenStream,
+        body: Self::TokenStream
+    ) -> Result<Self::TokenStream, Self::Error> {
+        let annotated_fn: ItemFn = syn::parse2(body)?;
+        let middleware = MiddlewareImpl::try_new(args, annotated_fn)?;
+
+        Ok(quote!(#middleware))
     }
 }
 

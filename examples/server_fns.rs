@@ -1,5 +1,5 @@
 use axum::{extract::FromRef, response::Html};
-use server_fns::{server, server_state::ServerState, ServerState};
+use server_fns::{middleware, server, server_state::ServerState, ServerState};
 
 #[derive(Debug, Default, Clone)]
 pub struct InnerState {
@@ -36,6 +36,7 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
+#[middleware(after routing {})]
 #[server(path = "/", method = "GET")]
 async fn index(#[state] AppState { inner }: AppState, body: String) -> Html<String> {
     let html = format!("<body>index and {inner:?}</body>");

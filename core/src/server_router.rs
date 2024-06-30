@@ -18,7 +18,3 @@ pub trait ServerRouter: Collect {
         loaded
     }
 }
-
-pub struct ServerRouterImpl {
-    pub span: Span
-}

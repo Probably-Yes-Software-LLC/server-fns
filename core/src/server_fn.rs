@@ -1,12 +1,12 @@
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
-    parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
+    self, parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
     Attribute, Block, Expr, FnArg, Generics, Ident, ItemFn, LitStr, PatType, Receiver, ReturnType,
     Token, Type, WherePredicate
 };
 
-use crate::parse::RouteMeta;
+use crate::parse::ServerFnArgs;
 
 pub struct ServerFn {
     pub span: Span,
@@ -59,14 +59,17 @@ mod server_fn_impl {
     use super::*;
 
     impl ServerFn {
-        pub fn try_new(meta: RouteMeta, server_fn: ItemFn) -> Result<Self, syn::Error> {
+        pub fn try_new(fn_args: ServerFnArgs, mut server_fn: ItemFn) -> Result<Self, syn::Error> {
             let span = server_fn.span();
             let fn_ident = &server_fn.sig.ident;
 
-            let RouteMeta {
-                http_path,
-                http_method
-            } = meta;
+            let ServerFnArgs {
+                path: http_path,
+                method,
+                middlewares
+            } = fn_args;
+
+            let http_method = method.or
 
             let router_fn_ident = format_ident!("{fn_ident}_router");
             let router_mod_ident = format_ident!("__{router_fn_ident}");
@@ -89,7 +92,8 @@ mod server_fn_impl {
                 input_args.clone(),
                 http_path,
                 http_method,
-                &stateful_fn_ident
+                &stateful_fn_ident,
+                middlewares
             )?;
             let stateful_handler = StatefulHandler::try_new(
                 args_span,
@@ -135,7 +139,7 @@ mod server_fn_impl {
 
 mod router_fn {
     use super::*;
-    use crate::{current_package, make_router};
+    use crate::{current_package, make_router, parse::Middleware};
 
     impl RouterFn {
         pub fn try_new<'a>(
@@ -144,7 +148,8 @@ mod router_fn {
             inputs: impl IntoIterator<Item = &'a PatType>,
             http_path: LitStr,
             http_method: Ident,
-            handler_ident: &Ident
+            handler_ident: &Ident,
+            middlewares: Vec<Middleware>
         ) -> Result<Self, syn::Error> {
             let state_attr = state_attr();
 
@@ -175,11 +180,25 @@ mod router_fn {
                 -> ::server_fns::axum::Router<State>
             };
 
+            let layers = middlewares
+                .into_iter()
+                .map(|Middleware { strat, expr }| -> Expr {
+                    match strat {
+                        RoutingStrategy::AfterRouting => parse_quote_spanned! { span =>
+                            .route_layer(#expr)
+                        },
+                        RoutingStrategy::BeforeRouting => parse_quote_spanned! { span =>
+                            .layer(#expr)
+                        }
+                    }
+                });
+
             let block = parse_quote_spanned! { span => {
                 ::server_fns::axum::Router::new().route(
                     #http_path,
                     ::server_fns::axum::routing::#http_method(#handler_ident)
                 )
+                #(#layers)*
             }};
 
             let pkg_router_ident = make_router(current_package(span)?);
