@@ -23,8 +23,8 @@ impl MiddlewareImpl {
         let Some(server_attr) = server_attr else {
             return Err(syn::Error::new(span, "#[server] attribute not found"));
         };
-        let attr_args = server_attr.parse_args::<ServerFnArgs>();
 
+        let attr_args = server_attr.parse_args::<ServerFnArgs>();
         let mut attr_args = match attr_args {
             Ok(attr_args) => attr_args,
             Err(mut err) => {
@@ -66,4 +66,14 @@ impl ToTokens for MiddlewareImpl {
 
         tokens.append_all(quote_spanned! { *span => #server_fn });
     }
+}
+
+#[cfg(test)]
+mod test {
+    use quote::quote;
+
+    use super::*;
+
+    #[test]
+    fn new_middleware() {}
 }

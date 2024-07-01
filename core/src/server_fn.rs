@@ -55,6 +55,16 @@ fn make_where_predicate(span: Span, arg_type: &Type) -> WherePredicate {
     }
 }
 
+#[macro_export]
+macro_rules! layer_middleware {
+    (after_routing($mid:expr) for $router:ident) => {
+        let $router = $router.route_layer($mid);
+    };
+    (before_routing($mid:expr) for $router:ident) => {
+        let $router = $router.layer($mid);
+    };
+}
+
 mod server_fn_impl {
     use super::*;
 
@@ -195,24 +205,17 @@ mod router_fn {
                 -> ::server_fns::axum::Router<State>
             };
 
-            // let layers = middlewares
-            //     .into_iter()
-            //     .map(|Middleware { strat, expr }| -> Expr {
-            //         match strat {
-            //             RoutingStrategy::AfterRouting => Expr::Verbatim(quote_spanned! { span =>
-            //                 .route_layer(#expr)
-            //             }),
-            //             RoutingStrategy::BeforeRouting => Expr::Verbatim(quote_spanned! { span =>
-            //                 .layer(#expr)
-            //             })
-            //         }
-            //     });
-
             let block = parse_quote_spanned! { span => {
-                ::server_fns::axum::Router::new().route(
+                let router = ::server_fns::axum::Router::new().route(
                     #http_path,
                     ::server_fns::axum::routing::#http_method(#handler_ident)
-                )
+                );
+
+                #(
+                    ::server_fns::layer_middleware!(#middlewares for router);
+                )*
+
+                router
             }};
 
             let pkg_router_ident = make_router(current_package(span)?);
@@ -247,6 +250,7 @@ mod router_fn {
             let (_, gen_types, where_clause) = gens.split_for_impl();
 
             tokens.append_all(quote_spanned! { *span =>
+                #[allow(unused_braces)]
                 pub fn #ident #gen_types () #output
                 #where_clause
                 #block

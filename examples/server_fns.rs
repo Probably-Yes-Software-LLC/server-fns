@@ -45,7 +45,13 @@ async fn test_middleware(request: Request, next: Next) -> Response {
     response
 }
 
+async fn test_middleware2(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    response
+}
+
 #[middleware(axum::middleware::from_fn(test_middleware))]
+#[middleware(axum::middleware::from_fn(test_middleware2))]
 #[server(path = "/", method = "GET")]
 async fn index(#[state] AppState { inner }: AppState, body: String) -> Html<String> {
     let html = format!("<body>index and {inner:?}</body>");
