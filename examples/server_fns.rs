@@ -1,4 +1,8 @@
-use axum::{extract::FromRef, response::Html};
+use axum::{
+    extract::{FromRef, Request},
+    middleware::Next,
+    response::{Html, Response}
+};
 use server_fns::{middleware, server, server_state::ServerState, ServerState};
 
 #[derive(Debug, Default, Clone)]
@@ -36,24 +40,29 @@ async fn main() {
     axum::serve(listener, app).await.unwrap();
 }
 
-#[middleware(after routing {})]
+async fn test_middleware(request: Request, next: Next) -> Response {
+    let response = next.run(request).await;
+    response
+}
+
+#[middleware(axum::middleware::from_fn(test_middleware))]
 #[server(path = "/", method = "GET")]
 async fn index(#[state] AppState { inner }: AppState, body: String) -> Html<String> {
     let html = format!("<body>index and {inner:?}</body>");
     Html(html)
 }
 
-#[server(path = "/example", method = "GET")]
-pub async fn example(
-    #[state] _app_state: AppState,
-    #[state] _inner_state: InnerState,
-    _body: String
-) -> Html<String> {
-    // body
-    Html("this is the example route".to_string())
-}
+// #[server(path = "/example", method = "GET")]
+// pub async fn example(
+//     #[state] _app_state: AppState,
+//     #[state] _inner_state: InnerState,
+//     _body: String
+// ) -> Html<String> {
+//     // body
+//     Html("this is the example route".to_string())
+// }
 
-#[server(method = "GET")]
-pub async fn test() -> Html<String> {
-    Html("this is the test route".to_string())
-}
+// #[server(method = "GET")]
+// pub async fn test() -> Html<String> {
+//     Html("this is the test route".to_string())
+// }

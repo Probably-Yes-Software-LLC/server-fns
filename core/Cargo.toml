@@ -19,3 +19,4 @@ deluxe = { workspace = true }
 derive-syn-parse = { workspace = true }
 itertools = { workspace = true }
 convert_case = { workspace = true }
+static_assertions = { workspace = true }

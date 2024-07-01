@@ -48,6 +48,14 @@ pub trait DeriveMacro {
     }
 }
 
+impl CompileError for TokenStream2 {
+    type TokenStream = Self;
+
+    fn into_comp_err_tokens(self) -> Self::TokenStream {
+        self
+    }
+}
+
 impl CompileError for syn::Error {
     type TokenStream = TokenStream2;
 

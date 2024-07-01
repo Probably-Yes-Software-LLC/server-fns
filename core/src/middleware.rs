@@ -23,8 +23,34 @@ impl MiddlewareImpl {
         let Some(server_attr) = server_attr else {
             return Err(syn::Error::new(span, "#[server] attribute not found"));
         };
-        let mut attr_args: ServerFnArgs = server_attr.parse_args()?;
-        attr_args.middlewares.push(syn::parse2(args)?);
+        let attr_args = server_attr.parse_args::<ServerFnArgs>();
+
+        let mut attr_args = match attr_args {
+            Ok(attr_args) => attr_args,
+            Err(mut err) => {
+                let dbg = syn::Error::new(
+                    Span::mixed_site(),
+                    "Error parsing server attribute arguments."
+                );
+                err.combine(dbg);
+
+                return Err(err);
+            }
+        };
+
+        let middleware = match syn::parse2(args) {
+            Ok(m) => m,
+            Err(mut err) => {
+                let dbg = syn::Error::new(
+                    Span::mixed_site(),
+                    "Error parsing middleware attribute arguments"
+                );
+                err.combine(dbg);
+
+                return Err(err);
+            }
+        };
+        attr_args.middlewares.push(middleware);
 
         server_fn
             .attrs

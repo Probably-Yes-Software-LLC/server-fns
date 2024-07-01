@@ -59,23 +59,36 @@ mod server_fn_impl {
     use super::*;
 
     impl ServerFn {
-        pub fn try_new(fn_args: ServerFnArgs, mut server_fn: ItemFn) -> Result<Self, syn::Error> {
+        pub fn try_new(fn_args: ServerFnArgs, server_fn: ItemFn) -> Result<Self, syn::Error> {
             let span = server_fn.span();
             let fn_ident = &server_fn.sig.ident;
 
             let ServerFnArgs {
-                path: http_path,
+                path,
                 method,
                 middlewares
             } = fn_args;
 
-            let http_method = method.or
+            let http_method = method
+                .map_or(Some("post".into()), |method| {
+                    Some(method.to_string().to_lowercase())
+                })
+                .map(|method| Ident::new(&method, Span::mixed_site()))
+                .unwrap();
+
+            let http_path = path.unwrap_or_else(|| {
+                LitStr::new(
+                    &format!("/api/{fn_ident}").replace('_', "-").to_lowercase(),
+                    fn_ident.span()
+                )
+            });
 
             let router_fn_ident = format_ident!("{fn_ident}_router");
             let router_mod_ident = format_ident!("__{router_fn_ident}");
-            let stateful_fn_ident = format_ident!("{}_{fn_ident}", http_method);
+            let stateful_fn_ident = format_ident!("{http_method}_{fn_ident}");
 
             let args_span = server_fn.sig.inputs.span();
+
             let input_args = server_fn
                 .sig
                 .inputs
@@ -95,6 +108,7 @@ mod server_fn_impl {
                 &stateful_fn_ident,
                 middlewares
             )?;
+
             let stateful_handler = StatefulHandler::try_new(
                 args_span,
                 stateful_fn_ident,
@@ -102,6 +116,7 @@ mod server_fn_impl {
                 &server_fn.sig.output,
                 fn_ident
             )?;
+
             let inner_handler = InnerHandler::try_new(server_fn)?;
 
             Ok(Self {
@@ -180,25 +195,24 @@ mod router_fn {
                 -> ::server_fns::axum::Router<State>
             };
 
-            let layers = middlewares
-                .into_iter()
-                .map(|Middleware { strat, expr }| -> Expr {
-                    match strat {
-                        RoutingStrategy::AfterRouting => parse_quote_spanned! { span =>
-                            .route_layer(#expr)
-                        },
-                        RoutingStrategy::BeforeRouting => parse_quote_spanned! { span =>
-                            .layer(#expr)
-                        }
-                    }
-                });
+            // let layers = middlewares
+            //     .into_iter()
+            //     .map(|Middleware { strat, expr }| -> Expr {
+            //         match strat {
+            //             RoutingStrategy::AfterRouting => Expr::Verbatim(quote_spanned! { span =>
+            //                 .route_layer(#expr)
+            //             }),
+            //             RoutingStrategy::BeforeRouting => Expr::Verbatim(quote_spanned! { span =>
+            //                 .layer(#expr)
+            //             })
+            //         }
+            //     });
 
             let block = parse_quote_spanned! { span => {
                 ::server_fns::axum::Router::new().route(
                     #http_path,
                     ::server_fns::axum::routing::#http_method(#handler_ident)
                 )
-                #(#layers)*
             }};
 
             let pkg_router_ident = make_router(current_package(span)?);

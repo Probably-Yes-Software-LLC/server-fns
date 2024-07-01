@@ -1,5 +1,4 @@
 use inventory::Collect;
-use proc_macro2::Span;
 
 pub type RouterFn<S> = fn() -> axum::Router<S>;
 
