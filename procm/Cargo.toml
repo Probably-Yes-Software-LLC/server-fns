@@ -8,3 +8,4 @@ proc-macro = true
 
 [dependencies]
 server-fns-core = { workspace = true }
+paste = { workspace = true }

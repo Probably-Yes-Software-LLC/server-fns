@@ -10,16 +10,35 @@ use syn::{
     Expr, ExprLit, ExprPath, Ident, Lit, LitStr, MetaNameValue, Token
 };
 
-mod kw {
-    use syn::custom_keyword;
-
-    custom_keyword!(middleware);
-    custom_keyword!(after);
-    custom_keyword!(before);
-    custom_keyword!(routing);
+#[macro_export]
+macro_rules! http_methods {
+    (contains $method:expr) => {{
+        $crate::http_methods! {
+            foreach! (stringify) +(.eq($method) ||)
+        }
+        false
+    }};
+    (foreach! ($macro:ident) $(+($($tt:tt)*))?) => {
+        $crate::http_methods! {
+            foreach!
+            [any delete get head options patch post put trace]
+            do!
+            ($macro)
+            $($($tt)*)?
+        }
+    };
+    (foreach! [$($method:ident)+] do! ($macro:ident)) => {
+        $(
+            $macro! { $method }
+        )+
+    };
 }
 
-#[derive(Default)]
+const SUPPORTED_HTTP_METHODS: [&str; 9] = [
+    "any", "delete", "get", "head", "options", "patch", "post", "put", "trace"
+];
+
+#[derive(Debug, Default, PartialEq)]
 pub struct ServerFnArgs {
     pub path: Option<LitStr>,
     pub method: Option<Ident>,
@@ -49,6 +68,8 @@ impl Parse for ServerFnArgs {
             }
         };
 
+        let x = http_methods!(contains "get");
+
         metas
             .into_iter()
             .try_fold(Self::default(), |mut args, next| {
@@ -70,7 +91,23 @@ impl Parse for ServerFnArgs {
                         Expr::Lit(ExprLit {
                             lit: Lit::Str(litstr),
                             ..
-                        }) => args.method = Some(Ident::new(&litstr.value(), litstr.span())),
+                        }) if SUPPORTED_HTTP_METHODS
+                            .contains(&litstr.value().to_lowercase().as_ref()) =>
+                        {
+                            args.method = Some(Ident::new(&litstr.value(), litstr.span()))
+                        }
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(litstr),
+                            ..
+                        }) => {
+                            return Err(syn::Error::new(
+                                litstr.span(),
+                                format!(
+                                    "Method not supported; found ({:?}), expected one of{:?}",
+                                    litstr, SUPPORTED_HTTP_METHODS
+                                )
+                            ));
+                        }
                         unexpected => {
                             return Err(syn::Error::new(
                                 unexpected.span(),
@@ -106,7 +143,7 @@ impl Parse for Middleware {
     fn parse(input: ParseStream) -> syn::Result<Self> {
         fn after_routing<T: ToTokens + Spanned>(expr: T) -> Expr {
             parse_quote_spanned! { expr.span() =>
-                after_routing({ #expr })
+                after_routing(#expr)
             }
         }
 
@@ -185,7 +222,54 @@ impl ToTokens for Middleware {
 
 #[cfg(test)]
 mod test {
+    use seq_macro::seq;
+
     use super::*;
+
+    macro_rules! test_parse_method {
+        ($method:expr) => {{
+            let method = $method;
+            let tokens = quote! {
+                path = "/test",
+                method = #method,
+                middlewares = [
+                    after_routing(fn_after),
+                    before_routing(fn_before)
+                ]
+            };
+            let server_fn_args: ServerFnArgs = syn::parse2(tokens.clone()).unwrap();
+            let expected = ServerFnArgs {
+                path: parse_quote!("/test"),
+                method: Some(Ident::new(method, Span::call_site())),
+                middlewares: vec![
+                    parse_quote!(after_routing(fn_after)),
+                    parse_quote!(before_routing(fn_before)),
+                ]
+            };
+            assert_eq!(server_fn_args, expected);
+            assert_eq!(
+                server_fn_args.to_token_stream().to_string(),
+                tokens.to_string()
+            );
+        }};
+    }
+
+    mod panics {
+        use super::*;
+
+        #[test]
+        #[should_panic(expected = "Method not supported")]
+        fn parse_bad_http_method() {
+            test_parse_method!("ping");
+        }
+    }
+
+    #[test]
+    fn parse_server_fn_args() {
+        seq!(N in 0..9 {
+            test_parse_method!(SUPPORTED_HTTP_METHODS[N]);
+        });
+    }
 
     #[test]
     fn parse_middleware() {
@@ -193,7 +277,7 @@ mod test {
             axum::middleware::from_fn(some_fn)
         };
         let expr: Expr = parse_quote! {
-            after_routing({ axum::middleware::from_fn(some_fn) })
+            after_routing(axum::middleware::from_fn(some_fn))
         };
         let middleware: Middleware = syn::parse2(tokens).unwrap();
         let expected = Middleware { expr: expr.clone() };

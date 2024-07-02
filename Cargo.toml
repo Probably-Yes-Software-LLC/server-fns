@@ -25,6 +25,8 @@ derive-syn-parse = "0.2.0"
 itertools = "0.13.0"
 convert_case = "0.6.0"
 static_assertions = "1.1.0"
+seq-macro = "0.3.5"
+paste = "1.0.15"
 
 [dependencies]
 server-fns-core = { workspace = true }

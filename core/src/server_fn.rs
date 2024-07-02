@@ -250,7 +250,6 @@ mod router_fn {
             let (_, gen_types, where_clause) = gens.split_for_impl();
 
             tokens.append_all(quote_spanned! { *span =>
-                #[allow(unused_braces)]
                 pub fn #ident #gen_types () #output
                 #where_clause
                 #block
