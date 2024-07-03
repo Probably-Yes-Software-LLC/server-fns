@@ -1,3 +1,4 @@
+pub mod http;
 mod macro_traits;
 pub mod middleware;
 mod parse;

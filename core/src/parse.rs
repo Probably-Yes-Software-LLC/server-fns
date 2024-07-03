@@ -10,36 +10,7 @@ use syn::{
     Expr, ExprLit, ExprPath, Ident, Lit, LitStr, MetaNameValue, Token
 };
 
-#[macro_export]
-macro_rules! http_methods {
-    (as slice) => {{
-        &[
-            $crate::http_methods! {
-                foreach! (stringify) (sep ,)
-            }
-        ];
-    }};
-    (foreach! ($macro:ident)) => {
-        $crate::http_methods! {
-            @foreach [any delete get head options patch post put trace]
-            do ($macro)
-        }
-    };
-    (@foreach [$($method:ident)+] do ($macro:ident)) => {
-        $(
-            $macro! { $method }
-        )+
-    };
-    (@foreach [$($method:ident,)+] do ($macro:ident)) => {
-        $(
-            $macro!($method)
-        )+
-    };
-}
-
-const SUPPORTED_HTTP_METHODS: [&str; 9] = [
-    "any", "delete", "get", "head", "options", "patch", "post", "put", "trace"
-];
+use crate::http_methods;
 
 #[derive(Debug, Default, PartialEq)]
 pub struct ServerFnArgs {
@@ -71,8 +42,6 @@ impl Parse for ServerFnArgs {
             }
         };
 
-        // let x = http_methods!(as slice);
-
         metas
             .into_iter()
             .try_fold(Self::default(), |mut args, next| {
@@ -94,9 +63,7 @@ impl Parse for ServerFnArgs {
                         Expr::Lit(ExprLit {
                             lit: Lit::Str(litstr),
                             ..
-                        }) if SUPPORTED_HTTP_METHODS
-                            .contains(&litstr.value().to_lowercase().as_ref()) =>
-                        {
+                        }) if http_methods!(contains!(&litstr.value().to_lowercase().as_ref())) => {
                             args.method = Some(Ident::new(&litstr.value(), litstr.span()))
                         }
                         Expr::Lit(ExprLit {
@@ -107,7 +74,8 @@ impl Parse for ServerFnArgs {
                                 litstr.span(),
                                 format!(
                                     "Method not supported; found ({:?}), expected one of{:?}",
-                                    litstr, SUPPORTED_HTTP_METHODS
+                                    litstr,
+                                    http_methods!(as_slice!())
                                 )
                             ));
                         }
@@ -230,6 +198,9 @@ mod test {
     use super::*;
 
     macro_rules! test_parse_method {
+        ($method:ident) => {
+            test_parse_method!(stringify!($method));
+        };
         ($method:expr) => {{
             let method = $method;
             let tokens = quote! {
@@ -269,9 +240,7 @@ mod test {
 
     #[test]
     fn parse_server_fn_args() {
-        seq!(N in 0..9 {
-            test_parse_method!(SUPPORTED_HTTP_METHODS[N]);
-        });
+        http_methods!(foreach!(test_parse_method!));
     }
 
     #[test]
