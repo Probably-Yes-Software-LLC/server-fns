@@ -12,24 +12,27 @@ use syn::{
 
 #[macro_export]
 macro_rules! http_methods {
-    (contains $method:expr) => {{
-        $crate::http_methods! {
-            foreach! (stringify) +(.eq($method) ||)
-        }
-        false
+    (as slice) => {{
+        &[
+            $crate::http_methods! {
+                foreach! (stringify) (sep ,)
+            }
+        ];
     }};
-    (foreach! ($macro:ident) $(+($($tt:tt)*))?) => {
+    (foreach! ($macro:ident)) => {
         $crate::http_methods! {
-            foreach!
-            [any delete get head options patch post put trace]
-            do!
-            ($macro)
-            $($($tt)*)?
+            @foreach [any delete get head options patch post put trace]
+            do ($macro)
         }
     };
-    (foreach! [$($method:ident)+] do! ($macro:ident)) => {
+    (@foreach [$($method:ident)+] do ($macro:ident)) => {
         $(
             $macro! { $method }
+        )+
+    };
+    (@foreach [$($method:ident,)+] do ($macro:ident)) => {
+        $(
+            $macro!($method)
         )+
     };
 }
@@ -68,7 +71,7 @@ impl Parse for ServerFnArgs {
             }
         };
 
-        let x = http_methods!(contains "get");
+        // let x = http_methods!(as slice);
 
         metas
             .into_iter()
