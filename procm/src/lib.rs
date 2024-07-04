@@ -19,6 +19,7 @@ pub fn server_state(item: TokenStream) -> TokenStream {
     ServerStateDerive.transform(item)
 }
 
+// Build a proc-macro attribute function for the given http method.
 macro_rules! make_method_macro {
     ($method:ident, $method_enum:expr) => {
         #[proc_macro_attribute]
@@ -28,4 +29,5 @@ macro_rules! make_method_macro {
     };
 }
 
+// Build a proc-macro for each http method supported.
 http_methods!(foreach!(make_method_macro));
