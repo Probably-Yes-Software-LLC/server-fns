@@ -20,35 +20,6 @@ pub(crate) fn make_router(make: impl AsRef<str>) -> Ident {
 
 pub struct ServerFnAttr;
 
-impl ServerFnAttr {
-    // pub fn transform_method<IntoTokens, FromTokens>(
-    //     method: HttpMethod,
-    //     args: IntoTokens,
-    //     body: IntoTokens
-    // ) -> FromTokens
-    // where
-    //     IntoTokens: Into<<Self as AttrMacro>::TokenStream>,
-    //     FromTokens: From<<Self as AttrMacro>::TokenStream>
-    // {
-    //     let body = body.into();
-
-    //     let mut args: ServerFnArgs = match syn::parse2(args.into()) {
-    //         Ok(args) => args,
-    //         Err(err) => {
-    //             let error = format!("Invalid server_fn args; {err:?}");
-
-    //             return Err(quote! {
-    //                 const SERVER_ATTR_ERROR: [&'static str; 0] = [#error];
-    //                 #body
-    //             });
-    //         }
-    //     };
-    //     args.method = Some(Ident::new(method.as_ref(), args.span()));
-
-    //     Self::transform(args.into_token_stream(), body)
-    // }
-}
-
 impl AttrMacro for ServerFnAttr {
     type TokenStream = TokenStream2;
     type Error = TokenStream2;
