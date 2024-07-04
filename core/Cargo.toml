@@ -19,7 +19,7 @@ deluxe = { workspace = true }
 derive-syn-parse = { workspace = true }
 itertools = { workspace = true }
 convert_case = { workspace = true }
-static_assertions = { workspace = true }
+paste = { workspace = true }
 
 [dev-dependencies]
 seq-macro = { workspace = true }

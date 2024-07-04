@@ -193,12 +193,10 @@ impl ToTokens for Middleware {
 
 #[cfg(test)]
 mod test {
-    use seq_macro::seq;
-
     use super::*;
 
     macro_rules! test_parse_method {
-        ($method:ident) => {
+        ($method:ident, $method_enum:expr) => {
             test_parse_method!(stringify!($method));
         };
         ($method:expr) => {{

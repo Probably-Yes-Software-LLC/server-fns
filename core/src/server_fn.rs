@@ -38,7 +38,7 @@ pub struct InnerHandler {
     pub handler_fn: ItemFn
 }
 
-pub fn reciever_error(rec: &Receiver) -> syn::Error {
+pub(crate) fn reciever_error(rec: &Receiver) -> syn::Error {
     syn::Error::new(
         rec.span(),
         "Reciever type 'self' is not supported in server functions."
@@ -53,16 +53,6 @@ fn make_where_predicate(span: Span, arg_type: &Type) -> WherePredicate {
     parse_quote_spanned! { span =>
         #arg_type: ::server_fns::axum::extract::FromRef<State>
     }
-}
-
-#[macro_export]
-macro_rules! layer_middleware {
-    (after_routing($mid:expr) for $router:ident) => {
-        let $router = $router.route_layer($mid);
-    };
-    (before_routing($mid:expr) for $router:ident) => {
-        let $router = $router.layer($mid);
-    };
 }
 
 mod server_fn_impl {

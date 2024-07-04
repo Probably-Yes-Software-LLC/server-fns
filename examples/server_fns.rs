@@ -3,7 +3,7 @@ use axum::{
     middleware::Next,
     response::{Html, Response}
 };
-use server_fns::{middleware, server, server_state::ServerState, ServerState};
+use server_fns::{get, middleware, server_state::ServerState, ServerState};
 
 #[derive(Debug, Default, Clone)]
 pub struct InnerState {
@@ -52,7 +52,7 @@ async fn test_middleware2(request: Request, next: Next) -> Response {
 
 #[middleware(axum::middleware::from_fn(test_middleware))]
 #[middleware(axum::middleware::from_fn(test_middleware2))]
-#[server(path = "/", method = "GET")]
+#[get(path = "/")]
 async fn index(#[state] AppState { inner }: AppState, body: String) -> Html<String> {
     let html = format!("<body>index and {inner:?}</body>");
     Html(html)

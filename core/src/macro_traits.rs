@@ -11,18 +11,16 @@ pub trait CompileError {
 pub trait AttrMacro {
     type TokenStream;
     type Error: CompileError<TokenStream = Self::TokenStream>;
+    type Result: Into<Result<Self::TokenStream, Self::Error>>;
 
-    fn transform2(
-        args: Self::TokenStream,
-        body: Self::TokenStream
-    ) -> Result<Self::TokenStream, Self::Error>;
+    fn transform2(&self, args: Self::TokenStream, body: Self::TokenStream) -> Self::Result;
 
-    fn transform<IntoTS, FromTS>(args: IntoTS, body: IntoTS) -> FromTS
+    fn transform<IntoTS, FromTS>(&self, args: IntoTS, body: IntoTS) -> FromTS
     where
         IntoTS: Into<Self::TokenStream>,
         FromTS: From<Self::TokenStream>
     {
-        match Self::transform2(args.into(), body.into()) {
+        match self.transform2(args.into(), body.into()).into() {
             Ok(ts) => ts.into(),
             Err(err) => err.into_comp_err_tokens().into()
         }
@@ -33,15 +31,16 @@ pub trait AttrMacro {
 pub trait DeriveMacro {
     type TokenStream;
     type Error: CompileError<TokenStream = Self::TokenStream>;
+    type Result: Into<Result<Self::TokenStream, Self::Error>>;
 
-    fn transform2(item: Self::TokenStream) -> Result<Self::TokenStream, Self::Error>;
+    fn transform2(&self, item: Self::TokenStream) -> Self::Result;
 
-    fn transform<IntoTS, FromTS>(item: IntoTS) -> FromTS
+    fn transform<IntoTS, FromTS>(&self, item: IntoTS) -> FromTS
     where
         IntoTS: Into<Self::TokenStream>,
         FromTS: From<Self::TokenStream>
     {
-        match Self::transform2(item.into()) {
+        match self.transform2(item.into()).into() {
             Ok(ts) => ts.into(),
             Err(err) => err.into_comp_err_tokens().into()
         }
