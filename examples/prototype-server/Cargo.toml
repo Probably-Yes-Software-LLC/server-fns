@@ -1,0 +1,32 @@
+[package]
+name = "prototype-server"
+version.workspace = true
+edition.workspace = true
+
+[workspace]
+members = [
+    "server-state", "extra-routes"
+]
+
+[workspace.package]
+version = "0.0.1"
+edition = "2021"
+
+[workspace.dependencies]
+axum = { version = "0.7", features = ["macros"] }
+server-fns = { path = "../../", default-features = false }
+tokio = {version = "1.38", features = ["full"] }
+tower = "0.4.13"
+
+[features]
+default = ["server"]
+web = ["server-fns/web", "server-state/web" ]
+server = ["server-fns/server", "server-state/server" ]
+
+[dependencies]
+axum = { workspace = true }
+tokio = { workspace = true }
+tower = { workspace = true }
+server-state = { path = "server-state" }
+extra-routes = { path = "extra-routes" }
+server-fns = { workspace = true }

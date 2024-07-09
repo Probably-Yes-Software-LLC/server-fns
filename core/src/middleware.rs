@@ -47,12 +47,13 @@ impl MiddlewareImpl {
         };
 
         // Parse out the server function arguments so the middleware expression can be added back in.
+        let server_attr_span = server_attr.span();
         let attr_args = server_attr.parse_args::<ServerFnArgs>();
         let mut attr_args = match attr_args {
             Ok(attr_args) => attr_args,
             Err(mut err) => {
                 let dbg = syn::Error::new(
-                    Span::mixed_site(),
+                    server_attr_span,
                     "Error parsing server attribute arguments."
                 );
                 err.combine(dbg);
@@ -61,14 +62,12 @@ impl MiddlewareImpl {
             }
         };
 
+        let arg_span = args.span();
         // Parse out the middleware expression.
         let middleware = match syn::parse2(args) {
             Ok(m) => m,
             Err(mut err) => {
-                let dbg = syn::Error::new(
-                    Span::mixed_site(),
-                    "Error parsing middleware attribute arguments"
-                );
+                let dbg = syn::Error::new(arg_span, "Error parsing middleware attribute arguments");
                 err.combine(dbg);
 
                 return Err(err);

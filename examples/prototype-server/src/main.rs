@@ -1,25 +1,10 @@
 use axum::{
     extract::{FromRef, Request},
     middleware::Next,
-    response::{Html, Response}
+    response::{Html, Response},
 };
-use server_fns::{get, middleware, server_state::ServerState, ServerState};
-
-#[derive(Debug, Default, Clone)]
-pub struct InnerState {
-    state: String
-}
-
-#[derive(Debug, Default, Clone, ServerState)]
-pub struct AppState {
-    inner: InnerState
-}
-
-impl FromRef<AppState> for InnerState {
-    fn from_ref(input: &AppState) -> Self {
-        input.inner.clone()
-    }
-}
+use server_fns::{get, middleware, server_state::ServerState};
+use server_state::{AppState, InnerState};
 
 #[tokio::main]
 async fn main() {
@@ -29,8 +14,8 @@ async fn main() {
 
     let app = router.with_state(AppState {
         inner: InnerState {
-            state: "fucking works bitch".to_string()
-        }
+            state: "fucking works bitch".to_string(),
+        },
     });
 
     println!("app {app:?}");
