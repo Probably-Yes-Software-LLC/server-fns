@@ -27,6 +27,7 @@ convert_case = "0.6.0"
 static_assertions = "1.1.0"
 seq-macro = "0.3.5"
 paste = "1.0.15"
+gloo-net = { version = "0.5.0", default-features = false }
 
 [dependencies]
 server-fns-core = { workspace = true }
@@ -34,8 +35,12 @@ server-fns-procm = { workspace = true }
 axum = { workspace = true }
 inventory = { workspace = true }
 paste = { workspace = true }
+gloo-net = { workspace = true, features = ["http", "json"], optional = true }
 
 [dev-dependencies]
-axum = {workspace = true, features = ["tokio", "http2"], default-features = true }
+axum = { workspace = true, features = [
+    "tokio",
+    "http2",
+], default-features = true }
 tower = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
