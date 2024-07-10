@@ -153,13 +153,13 @@ impl FnMacro for UseServerStateFnMacro {
     type Error = syn::Error;
     type Result = Result<Self::TokenStream, Self::Error>;
 
-    fn transform2(&self, tipe: Self::TokenStream) -> Self::Result {
-        let tipe: TypePath = syn::parse2(tipe)?;
-        let pkg_router = make_server_state(current_package(tipe.span())?);
+    fn transform2(&self, typ: Self::TokenStream) -> Self::Result {
+        let typ: TypePath = syn::parse2(typ)?;
+        let pkg_state = make_server_state(current_package(typ.span())?);
 
         Ok(quote! {
             #[cfg(feature = "server")]
-            pub(crate) type #pkg_router = #tipe;
+            pub(crate) type #pkg_state = #typ;
         })
     }
 }

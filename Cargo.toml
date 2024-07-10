@@ -1,6 +1,6 @@
 [workspace]
 members = [
-    "core",
+    "core", "examples/auth-middleware",
     "examples/extra-routes",
     "examples/prototype-server",
     "examples/server-state",

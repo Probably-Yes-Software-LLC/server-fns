@@ -209,12 +209,15 @@ mod router_fn {
                 router
             }};
 
-            // let pkg_router_ident = make_router(current_package(span)?);
             let pkg_server_state = make_server_state(current_package(span)?);
             let register_route = parse_quote_spanned! { span =>
                 ::server_fns::inventory::submit! {
-                    <#pkg_server_state as ::server_fns::server_state::ServerState>
-                        ::Router::register(#http_path, #ident)
+                    <
+                        #pkg_server_state
+                        as
+                        ::server_fns::server_state::ServerState
+                    >
+                    ::Router::register(#http_path, #ident)
                 }
             };
 

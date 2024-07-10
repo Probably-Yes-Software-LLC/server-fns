@@ -40,22 +40,7 @@ async fn test_middleware2(request: Request, next: Next) -> Response {
 #[middleware(axum::middleware::from_fn(test_middleware))]
 #[middleware(axum::middleware::from_fn(test_middleware2))]
 #[get(path = "/")]
-async fn index(#[state] AppState { inner }: AppState, body: String) -> Html<String> {
+async fn index(#[state] AppState { inner }: AppState) -> Html<String> {
     let html = format!("<body>index and {inner:?}</body>");
     Html(html)
 }
-
-// #[server(path = "/example", method = "GET")]
-// pub async fn example(
-//     #[state] _app_state: AppState,
-//     #[state] _inner_state: InnerState,
-//     _body: String
-// ) -> Html<String> {
-//     // body
-//     Html("this is the example route".to_string())
-// }
-
-// #[server(method = "GET")]
-// pub async fn test() -> Html<String> {
-//     Html("this is the test route".to_string())
-// }
