@@ -1,11 +1,12 @@
 [package]
 name = "server-fns-procm"
-version = { workspace = true }
-edition = { workspace = true }
+
+edition.workspace = true
+version.workspace = true
 
 [lib]
 proc-macro = true
 
 [dependencies]
+paste           = { workspace = true }
 server-fns-core = { workspace = true }
-paste = { workspace = true }

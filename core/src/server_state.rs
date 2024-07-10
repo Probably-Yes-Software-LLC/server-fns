@@ -54,8 +54,11 @@ impl ToTokens for ServerStateImpl {
         let router_fn_type = format_ident!("{state_router}Fn");
 
         tokens.append_all(quote_spanned! { *span =>
-            pub type #package_router = #module::#state_router;
+            #[cfg(feature = "server")]
+            #[allow(unused)]
+            pub(crate) type #package_router = #module::#state_router;
 
+            #[cfg(feature = "server")]
             mod #module {
                 #[automatically_derived]
                 impl ::server_fns::server_state::ServerState for super::#ident {

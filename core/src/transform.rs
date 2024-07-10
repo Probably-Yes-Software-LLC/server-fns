@@ -3,11 +3,11 @@ use std::env;
 use convert_case::{Case, Casing};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote, ToTokens};
-use syn::{spanned::Spanned, Ident, ItemFn, ItemStruct};
+use syn::{spanned::Spanned, Ident, ItemFn, ItemStruct, TypePath};
 
 use crate::{
     middleware::MiddlewareImpl, parse::ServerFnArgs, server_fn::ServerFn,
-    server_state::ServerStateImpl, AttrMacro, DeriveMacro, HttpMethod
+    server_state::ServerStateImpl, AttrMacro, DeriveMacro, FnMacro, HttpMethod
 };
 
 pub(crate) fn current_package(span: Span) -> Result<String, syn::Error> {
@@ -18,9 +18,13 @@ pub(crate) fn make_router(make: impl AsRef<str>) -> Ident {
     format_ident!("{}Router", make.as_ref().to_case(Case::Pascal))
 }
 
-pub struct ServerFnAttr;
+pub(crate) fn make_server_state(make: impl AsRef<str>) -> Ident {
+    format_ident!("{}ServerState", make.as_ref().to_case(Case::Pascal))
+}
 
-impl AttrMacro for ServerFnAttr {
+pub struct ServerFnAttrMacro;
+
+impl AttrMacro for ServerFnAttrMacro {
     type TokenStream = TokenStream2;
     type Error = TokenStream2;
     type Result = Result<Self::TokenStream, Self::Error>;
@@ -69,9 +73,9 @@ impl AttrMacro for ServerFnAttr {
 pub struct ServerFnMethodAttr(pub HttpMethod);
 
 impl AttrMacro for ServerFnMethodAttr {
-    type TokenStream = <ServerFnAttr as AttrMacro>::TokenStream;
-    type Error = <ServerFnAttr as AttrMacro>::Error;
-    type Result = <ServerFnAttr as AttrMacro>::Result;
+    type TokenStream = <ServerFnAttrMacro as AttrMacro>::TokenStream;
+    type Error = <ServerFnAttrMacro as AttrMacro>::Error;
+    type Result = <ServerFnAttrMacro as AttrMacro>::Result;
 
     fn transform2(&self, args: Self::TokenStream, body: Self::TokenStream) -> Self::Result {
         let mut args: ServerFnArgs = match syn::parse2(args) {
@@ -87,13 +91,13 @@ impl AttrMacro for ServerFnMethodAttr {
         };
         args.method = Some(Ident::new(self.0.as_ref(), body.span()));
 
-        ServerFnAttr.transform2(args.into_token_stream(), body)
+        ServerFnAttrMacro.transform2(args.into_token_stream(), body)
     }
 }
 
-pub struct MiddlewareAttr;
+pub struct MiddlewareAttrMacro;
 
-impl AttrMacro for MiddlewareAttr {
+impl AttrMacro for MiddlewareAttrMacro {
     type TokenStream = TokenStream2;
     type Error = TokenStream2;
     type Result = Result<Self::TokenStream, Self::Error>;
@@ -127,9 +131,9 @@ impl AttrMacro for MiddlewareAttr {
     }
 }
 
-pub struct ServerStateDerive;
+pub struct ServerStateDeriveMacro;
 
-impl DeriveMacro for ServerStateDerive {
+impl DeriveMacro for ServerStateDeriveMacro {
     type TokenStream = TokenStream2;
     type Error = syn::Error;
     type Result = Result<Self::TokenStream, Self::Error>;
@@ -139,5 +143,23 @@ impl DeriveMacro for ServerStateDerive {
         let derive_impl = ServerStateImpl::try_new(annotated_struct)?;
 
         Ok(quote!(#derive_impl))
+    }
+}
+
+pub struct UseServerStateFnMacro;
+
+impl FnMacro for UseServerStateFnMacro {
+    type TokenStream = TokenStream2;
+    type Error = syn::Error;
+    type Result = Result<Self::TokenStream, Self::Error>;
+
+    fn transform2(&self, tipe: Self::TokenStream) -> Self::Result {
+        let tipe: TypePath = syn::parse2(tipe)?;
+        let pkg_router = make_server_state(current_package(tipe.span())?);
+
+        Ok(quote! {
+            #[cfg(feature = "server")]
+            pub(crate) type #pkg_router = #tipe;
+        })
     }
 }

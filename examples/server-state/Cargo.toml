@@ -1,0 +1,14 @@
+[package]
+name = "server-state"
+
+edition.workspace = true
+version.workspace = true
+
+[features]
+default = ["server"]
+server  = ["server-fns/server"]
+web     = ["server-fns/web"]
+
+[dependencies]
+axum       = { workspace = true, features = ["macros"] }
+server-fns = { workspace = true }

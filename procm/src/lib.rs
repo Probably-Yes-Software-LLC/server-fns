@@ -1,22 +1,27 @@
 use proc_macro::TokenStream;
 use server_fns_core::{
-    http_methods, AttrMacro, DeriveMacro, HttpMethod, MiddlewareAttr, ServerFnAttr,
-    ServerFnMethodAttr, ServerStateDerive
+    http_methods, AttrMacro, DeriveMacro, FnMacro, HttpMethod, MiddlewareAttrMacro,
+    ServerFnAttrMacro, ServerFnMethodAttr, ServerStateDeriveMacro, UseServerStateFnMacro
 };
 
 #[proc_macro_attribute]
 pub fn server(args: TokenStream, body: TokenStream) -> TokenStream {
-    ServerFnAttr.transform(args, body)
+    ServerFnAttrMacro.transform(args, body)
 }
 
 #[proc_macro_attribute]
 pub fn middleware(args: TokenStream, body: TokenStream) -> TokenStream {
-    MiddlewareAttr.transform(args, body)
+    MiddlewareAttrMacro.transform(args, body)
 }
 
 #[proc_macro_derive(ServerState)]
 pub fn server_state(item: TokenStream) -> TokenStream {
-    ServerStateDerive.transform(item)
+    ServerStateDeriveMacro.transform(item)
+}
+
+#[proc_macro]
+pub fn use_server_state(item: TokenStream) -> TokenStream {
+    UseServerStateFnMacro.transform(item)
 }
 
 // Build a proc-macro attribute function for the given http method.

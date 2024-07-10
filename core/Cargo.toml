@@ -1,25 +1,20 @@
 [package]
 name = "server-fns-core"
-version = { workspace = true }
-edition = { workspace = true }
+
+edition.workspace = true
+version.workspace = true
 
 [dependencies]
-syn = { workspace = true, features = [
-    "parsing",
-    "derive",
-    "full",
-    "extra-traits",
-    "printing",
-] }
-proc-macro2 = { workspace = true }
-quote = { workspace = true }
-inventory = { workspace = true }
-axum = { workspace = true }
-deluxe = { workspace = true }
+axum             = { workspace = true }
+convert_case     = { workspace = true }
+deluxe           = { workspace = true }
 derive-syn-parse = { workspace = true }
-itertools = { workspace = true }
-convert_case = { workspace = true }
-paste = { workspace = true }
+inventory        = { workspace = true }
+itertools        = { workspace = true }
+paste            = { workspace = true }
+proc-macro2      = { workspace = true }
+quote            = { workspace = true }
+syn              = { workspace = true, features = ["derive", "extra-traits", "full", "parsing", "printing"] }
 
 [dev-dependencies]
 seq-macro = { workspace = true }

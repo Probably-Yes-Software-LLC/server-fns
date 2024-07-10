@@ -1,0 +1,18 @@
+[package]
+name = "server-fns"
+
+edition.workspace = true
+version.workspace = true
+
+[features]
+default = ["server", "web"]
+server  = ["dep:axum", "dep:inventory"]
+web     = ["dep:gloo-net"]
+
+[dependencies]
+axum             = { workspace = true, optional = true }
+gloo-net         = { workspace = true, optional = true }
+inventory        = { workspace = true, optional = true }
+paste            = { workspace = true }
+server-fns-core  = { workspace = true }
+server-fns-procm = { workspace = true }

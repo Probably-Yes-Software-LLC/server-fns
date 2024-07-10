@@ -1,6 +1,7 @@
 [package]
 name = "extra-routes"
-version.workspace = true
+
 edition.workspace = true
+version.workspace = true
 
 [dependencies]

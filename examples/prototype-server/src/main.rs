@@ -1,10 +1,12 @@
 use axum::{
-    extract::{FromRef, Request},
+    extract::Request,
     middleware::Next,
-    response::{Html, Response},
+    response::{Html, Response}
 };
-use server_fns::{get, middleware, server_state::ServerState};
+use server_fns::{get, middleware, server_state::ServerState, use_server_state};
 use server_state::{AppState, InnerState};
+
+use_server_state!(AppState);
 
 #[tokio::main]
 async fn main() {
@@ -14,8 +16,8 @@ async fn main() {
 
     let app = router.with_state(AppState {
         inner: InnerState {
-            state: "fucking works bitch".to_string(),
-        },
+            state: "fucking works bitch".to_string()
+        }
     });
 
     println!("app {app:?}");
