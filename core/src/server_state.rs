@@ -5,14 +5,11 @@ use syn::{spanned::Spanned, Ident, ItemStruct};
 
 use crate::{current_package, make_router, server_router::ServerRouter};
 
-pub trait ServerState {
+pub trait ServerState: Clone + Send + Sync + Sized + 'static {
     type Router: ServerRouter<State = Self>;
 
-    fn load_routes() -> axum::Router<Self>
-    where
-        Self: Sized
-    {
-        Self::Router::load_routes()
+    fn load_routes(self) -> axum::Router {
+        Self::Router::load_routes().with_state(self)
     }
 }
 

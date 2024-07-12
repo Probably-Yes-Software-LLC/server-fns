@@ -10,15 +10,14 @@ use_server_state!(AppState);
 
 #[tokio::main]
 async fn main() {
-    let router = AppState::load_routes();
-
     println!("after auto routes");
 
-    let app = router.with_state(AppState {
+    let app = AppState {
         inner: InnerState {
             state: "fucking works bitch".to_string()
         }
-    });
+    }
+    .load_routes();
 
     println!("app {app:?}");
 

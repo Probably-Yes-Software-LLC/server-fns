@@ -1,9 +1,11 @@
 use inventory::Collect;
 
+use crate::server_state::ServerState;
+
 pub type RouterFn<S> = fn() -> axum::Router<S>;
 
 pub trait ServerRouter: Collect {
-    type State: Clone + Send + Sync;
+    type State: ServerState<Router = Self>;
 
     fn router(&self) -> axum::Router<Self::State>;
 
