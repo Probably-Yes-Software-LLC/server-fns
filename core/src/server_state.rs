@@ -5,7 +5,13 @@ use syn::{spanned::Spanned, Ident, ItemStruct};
 
 use crate::{current_package, make_router, server_router::ServerRouter};
 
+/// Trait corresponding to types that can be used as the state of an [axum::Router].
+///
+/// Defines a struct as the 'State' parameter of an [axum::Router<State>],
+/// with routes collected at startup from the [ServerState::Router]'s
+/// [inventory] of routes, identified with a [ServerRouter::State] of [Self].
 pub trait ServerState: Clone + Send + Sync + Sized + 'static {
+    /// The type through which routes are collected.
     type Router: ServerRouter<State = Self>;
 
     fn load_routes(self) -> axum::Router {
