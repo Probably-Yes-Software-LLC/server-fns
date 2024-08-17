@@ -2,18 +2,19 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
     self, parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
-    Attribute, Block, Expr, FnArg, Generics, Ident, ItemFn, LitStr, PatType, Receiver, ReturnType,
-    Token, Type, WherePredicate,
+    Attribute, Block, Expr, FnArg, Generics, Ident, ItemConst, ItemFn, LitStr, PatType, Receiver,
+    ReturnType, Token, Type, WherePredicate
 };
 
 use crate::parse::ServerFnArgs;
 
 pub struct ServerFn {
     pub span: Span,
+    pub route_const: ItemConst,
     pub router_mod: Ident,
     pub router_fn: RouterFn,
     pub stateful_handler: StatefulHandler,
-    pub inner_handler: InnerHandler,
+    pub inner_handler: InnerHandler
 }
 
 pub struct RouterFn {
@@ -22,7 +23,7 @@ pub struct RouterFn {
     pub gens: Generics,
     pub output: ReturnType,
     pub block: Block,
-    pub register_route: Expr,
+    pub register_route: Expr
 }
 
 pub struct StatefulHandler {
@@ -30,18 +31,18 @@ pub struct StatefulHandler {
     pub ident: Ident,
     pub args: Punctuated<FnArg, Comma>,
     pub output: ReturnType,
-    pub block: Block,
+    pub block: Block
 }
 
 pub struct InnerHandler {
     pub span: Span,
-    pub handler_fn: ItemFn,
+    pub handler_fn: ItemFn
 }
 
 pub(crate) fn reciever_error(rec: &Receiver) -> syn::Error {
     syn::Error::new(
         rec.span(),
-        "Reciever type 'self' is not supported in server functions.",
+        "Reciever type 'self' is not supported in server functions."
     )
 }
 
@@ -56,6 +57,8 @@ fn make_where_predicate(span: Span, arg_type: &Type) -> WherePredicate {
 }
 
 mod server_fn_impl {
+    use convert_case::{Case, Casing};
+
     use super::*;
 
     impl ServerFn {
@@ -66,7 +69,7 @@ mod server_fn_impl {
             let ServerFnArgs {
                 path,
                 method,
-                middlewares,
+                middlewares
             } = fn_args;
 
             let http_method = method
@@ -78,14 +81,22 @@ mod server_fn_impl {
 
             let http_path = path.unwrap_or_else(|| {
                 LitStr::new(
-                    &format!("/api/{fn_ident}").replace('_', "-").to_lowercase(),
-                    fn_ident.span(),
+                    &format!("/api/{}", fn_ident.to_string().to_case(Case::Kebab)),
+                    fn_ident.span()
                 )
             });
 
             let router_fn_ident = format_ident!("{fn_ident}_router");
             let router_mod_ident = format_ident!("__{router_fn_ident}");
             let stateful_fn_ident = format_ident!("{http_method}_{fn_ident}");
+            let route_const_ident = format_ident!(
+                "{}",
+                stateful_fn_ident.to_string().to_case(Case::UpperSnake)
+            );
+
+            let route_const = parse_quote_spanned! { fn_ident.span() =>
+                const #route_const_ident: &'static str = #http_path;
+            };
 
             let args_span = server_fn.sig.inputs.span();
 
@@ -95,7 +106,7 @@ mod server_fn_impl {
                 .iter()
                 .map(|arg| match arg {
                     FnArg::Receiver(rec) => Err(reciever_error(rec)),
-                    FnArg::Typed(typ) => Ok(typ),
+                    FnArg::Typed(typ) => Ok(typ)
                 })
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -106,7 +117,7 @@ mod server_fn_impl {
                 http_path,
                 http_method,
                 &stateful_fn_ident,
-                middlewares,
+                middlewares
             )?;
 
             let stateful_handler = StatefulHandler::try_new(
@@ -114,17 +125,18 @@ mod server_fn_impl {
                 stateful_fn_ident,
                 input_args,
                 &server_fn.sig.output,
-                fn_ident,
+                fn_ident
             )?;
 
             let inner_handler = InnerHandler::try_new(server_fn)?;
 
             Ok(Self {
                 span,
+                route_const,
                 router_mod: router_mod_ident,
                 router_fn,
                 stateful_handler,
-                inner_handler,
+                inner_handler
             })
         }
     }
@@ -133,13 +145,16 @@ mod server_fn_impl {
         fn to_tokens(&self, tokens: &mut TokenStream2) {
             let Self {
                 span,
+                route_const,
                 router_mod,
                 router_fn,
                 stateful_handler,
-                inner_handler,
+                inner_handler
             } = self;
 
             tokens.append_all(quote_spanned! { *span =>
+                #route_const
+
                 #[cfg(feature = "server")]
                 pub mod #router_mod {
                     use super::*;
@@ -147,6 +162,8 @@ mod server_fn_impl {
                     #router_fn
                     #stateful_handler
                 }
+
+                #[cfg(feature = "server")]
                 #inner_handler
             });
         }
@@ -165,7 +182,7 @@ mod router_fn {
             http_path: LitStr,
             http_method: Ident,
             handler_ident: &Ident,
-            middlewares: Vec<Middleware>,
+            middlewares: Vec<Middleware>
         ) -> Result<Self, syn::Error> {
             let state_attr = state_attr();
 
@@ -180,7 +197,7 @@ mod router_fn {
                                 ::std::marker::Sync +
                                 'static
 
-                },
+                }
             };
 
             for next in inputs {
@@ -227,7 +244,7 @@ mod router_fn {
                 gens,
                 output,
                 block,
-                register_route,
+                register_route
             })
         }
     }
@@ -240,7 +257,7 @@ mod router_fn {
                 gens,
                 output,
                 block,
-                register_route,
+                register_route
             } = self;
 
             let (_, gen_types, where_clause) = gens.split_for_impl();
@@ -265,12 +282,12 @@ mod stateful_handler {
             ident: Ident,
             inputs: impl IntoIterator<Item = &'a PatType>,
             output: &ReturnType,
-            handler_fn_ident: &Ident,
+            handler_fn_ident: &Ident
         ) -> Result<Self, syn::Error> {
             #[derive(Default)]
             struct BuildArgs {
                 args: Punctuated<FnArg, Comma>,
-                handler_args: Punctuated<Expr, Comma>,
+                handler_args: Punctuated<Expr, Comma>
             }
 
             let state_attr = state_attr();
@@ -285,7 +302,7 @@ mod stateful_handler {
 
                 let BuildArgs {
                     ref mut args,
-                    ref mut handler_args,
+                    ref mut handler_args
                 } = build_args;
 
                 args.push(if next.attrs.contains(&state_attr) {
@@ -311,7 +328,7 @@ mod stateful_handler {
                 ident,
                 args,
                 output: output.clone(),
-                block,
+                block
             })
         }
     }
@@ -323,7 +340,7 @@ mod stateful_handler {
                 ident,
                 args,
                 output,
-                block,
+                block
             } = self;
 
             tokens
@@ -340,6 +357,7 @@ mod inner_handler {
             let state_attr = state_attr();
             let span = handler_fn.span();
 
+            // Strip #[state] attr from params
             for input in &mut handler_fn.sig.inputs {
                 match input {
                     FnArg::Receiver(rec) => return Err(reciever_error(rec)),
