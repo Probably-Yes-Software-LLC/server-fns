@@ -153,6 +153,7 @@ mod server_fn_impl {
             } = self;
 
             tokens.append_all(quote_spanned! { *span =>
+                #[allow(unused)]
                 #route_const
 
                 #[cfg(feature = "server")]

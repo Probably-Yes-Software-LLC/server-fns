@@ -1,11 +1,12 @@
 [workspace]
 members = [
-    "core", "examples/auth-middleware",
+    "core",
+    "examples/auth-middleware",
     "examples/extra-routes",
     "examples/prototype-server",
     "examples/server-state",
     "main",
-    "procm"
+    "procm",
 ]
 resolver = "2"
 
@@ -18,7 +19,7 @@ axum              = { version = "0.7", default-features = false }
 convert_case      = "0.6.0"
 deluxe            = "0.5.0"
 derive-syn-parse  = "0.2.0"
-gloo-net          = { version = "0.5.0" }
+gloo-net          = { version = "0.6.0" }
 inventory         = "0.3.15"
 itertools         = "0.13.0"
 paste             = "1.0.15"
@@ -31,4 +32,5 @@ server-fns-procm  = { version = "0.1.0", path = "procm" }
 static_assertions = "1.1.0"
 syn               = "2.0.66"
 tokio             = "1.38"
-tower             = "0.4.13"
+tower             = "0.5.0"
+tower-layer       = "0.3.3"
