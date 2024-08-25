@@ -274,12 +274,13 @@ fn static_asset_to_tokens(
         ::server_fns::load_asset! {
             @IDENTITY {
                 use ::server_fns::embed_asset::EmbeddedAsset;
+                use ::server_fns::embed_asset::AssetError;
 
                 #(#static_assets)*
 
                 match &#path {
                     #(#matchers),*
-                    _ => None
+                    unknown => Err(AssetError::NotFound(unknown))
                 }
             }
         }
