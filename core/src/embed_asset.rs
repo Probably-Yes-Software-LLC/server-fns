@@ -280,7 +280,7 @@ fn static_asset_to_tokens(
 
                 match &#path {
                     #(#matchers),*
-                    unknown => Err(AssetError::NotFound(unknown))
+                    unknown => Err(AssetError::NotFound(unknown.to_string()))
                 }
             }
         }
