@@ -16,6 +16,7 @@ version = "0.1.0"
 
 [workspace.dependencies]
 axum              = { version = "0.7", default-features = false }
+bytes             = "1.7.1"
 convert_case      = "0.6.0"
 deluxe            = "0.5.0"
 derive-syn-parse  = "0.2.0"
@@ -31,6 +32,12 @@ server-fns-core   = { version = "0.1.0", path = "core" }
 server-fns-procm  = { version = "0.1.0", path = "procm" }
 static_assertions = "1.1.0"
 syn               = "2.0.66"
+thiserror         = "1.0.63"
 tokio             = "1.38"
 tower             = "0.5.0"
 tower-layer       = "0.3.3"
+trait-variant     = "0.1.2"
+
+[workspace.dependencies.mime_guess]
+default-features = false
+version          = "2.0.5"

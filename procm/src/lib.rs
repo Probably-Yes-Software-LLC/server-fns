@@ -1,7 +1,8 @@
 use proc_macro::TokenStream;
 use server_fns_core::{
-    http_methods, AttrMacro, DeriveMacro, FnMacro, HttpMethod, MiddlewareAttrMacro,
-    ServerFnAttrMacro, ServerFnMethodAttr, ServerStateDeriveMacro, UseServerStateFnMacro
+    http_methods, AttrMacro, DeriveMacro, FnMacro, HttpMethod, LoadAssetInternalMacro,
+    MiddlewareAttrMacro, ServerFnAttrMacro, ServerFnMethodAttr, ServerStateDeriveMacro,
+    UseServerStateFnMacro
 };
 
 #[proc_macro_attribute]
@@ -22,6 +23,11 @@ pub fn server_state(item: TokenStream) -> TokenStream {
 #[proc_macro]
 pub fn use_server_state(item: TokenStream) -> TokenStream {
     UseServerStateFnMacro.transform(item)
+}
+
+#[proc_macro]
+pub fn __load_asset(item: TokenStream) -> TokenStream {
+    LoadAssetInternalMacro.transform(item)
 }
 
 // Build a proc-macro attribute function for the given http method.

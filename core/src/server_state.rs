@@ -19,7 +19,7 @@ pub trait ServerState: Clone + Send + Sync + Sized + 'static {
     }
 }
 
-pub struct ServerStateImpl {
+pub(crate) struct ServerStateImpl {
     pub span: Span,
     pub ident: Ident,
     pub current_package: String

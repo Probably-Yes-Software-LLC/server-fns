@@ -5,16 +5,31 @@ edition.workspace = true
 version.workspace = true
 
 [dependencies]
-axum             = { workspace = true }
-convert_case     = { workspace = true }
-deluxe           = { workspace = true }
-derive-syn-parse = { workspace = true }
-inventory        = { workspace = true }
-itertools        = { workspace = true }
-paste            = { workspace = true }
-proc-macro2      = { workspace = true }
-quote            = { workspace = true }
-syn              = { workspace = true, features = ["derive", "extra-traits", "full", "parsing", "printing"] }
+axum.workspace             = true
+bytes.workspace            = true
+convert_case.workspace     = true
+deluxe.workspace           = true
+derive-syn-parse.workspace = true
+inventory.workspace        = true
+itertools.workspace        = true
+mime_guess.workspace       = true
+paste.workspace            = true
+proc-macro2.workspace      = true
+quote.workspace            = true
+thiserror.workspace        = true
+trait-variant.workspace    = true
+
+syn = { workspace = true, features = [
+    "derive",
+    "extra-traits",
+    "full",
+    "parsing",
+    "printing",
+] }
+
+[dependencies.tokio]
+features  = ["fs", "rt-multi-thread"]
+workspace = true
 
 [dev-dependencies]
 seq-macro = { workspace = true }

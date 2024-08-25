@@ -3,11 +3,12 @@ use std::env;
 use convert_case::{Case, Casing};
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote, ToTokens};
-use syn::{spanned::Spanned, Ident, ItemFn, ItemStruct, TypePath};
+use syn::{spanned::Spanned, ExprStruct, Ident, ItemFn, ItemStruct, TypePath};
 
 use crate::{
-    middleware::MiddlewareImpl, parse::ServerFnArgs, server_fn::ServerFn,
-    server_state::ServerStateImpl, AttrMacro, DeriveMacro, FnMacro, HttpMethod
+    embed_asset::LoadAssetImpl, middleware::MiddlewareImpl, parse::ServerFnArgs,
+    server_fn::ServerFn, server_state::ServerStateImpl, AttrMacro, DeriveMacro, FnMacro,
+    HttpMethod
 };
 
 pub(crate) fn current_package(span: Span) -> Result<String, syn::Error> {
@@ -89,6 +90,8 @@ impl AttrMacro for ServerFnMethodAttr {
                 });
             }
         };
+
+        // Set (or override) the method to the method macro used instead.
         args.method = Some(Ident::new(self.0.as_ref(), body.span()));
 
         ServerFnAttrMacro.transform2(args.into_token_stream(), body)
@@ -161,5 +164,20 @@ impl FnMacro for UseServerStateFnMacro {
             #[cfg(feature = "server")]
             pub(crate) type #pkg_state = #typ;
         })
+    }
+}
+
+pub struct LoadAssetInternalMacro;
+
+impl FnMacro for LoadAssetInternalMacro {
+    type TokenStream = TokenStream2;
+    type Error = syn::Error;
+    type Result = Result<Self::TokenStream, Self::Error>;
+
+    fn transform2(&self, item: Self::TokenStream) -> Self::Result {
+        let embed_input: ExprStruct = syn::parse2(item)?;
+        let embed_impl = LoadAssetImpl::try_new(embed_input)?;
+
+        Ok(quote!(#embed_impl))
     }
 }

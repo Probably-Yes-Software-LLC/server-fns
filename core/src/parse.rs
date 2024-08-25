@@ -16,6 +16,7 @@ use crate::http_methods;
 pub struct ServerFnArgs {
     pub path: Option<LitStr>,
     pub method: Option<Ident>,
+    pub embed: Option<LitStr>,
     pub middlewares: Vec<Middleware>
 }
 
@@ -83,6 +84,19 @@ impl Parse for ServerFnArgs {
                             return Err(syn::Error::new(
                                 unexpected.span(),
                                 format!("Method must be a string literal; found ({unexpected:?})")
+                            ));
+                        }
+                    }
+                } else if next.path.is_ident("embed") {
+                    match next.value {
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(litstr),
+                            ..
+                        }) => args.embed = Some(litstr),
+                        unexpected => {
+                            return Err(syn::Error::new(
+                                unexpected.span(),
+                                format!("Embed must be a string literal; found ({unexpected:?})")
                             ));
                         }
                     }
@@ -161,6 +175,7 @@ impl ToTokens for ServerFnArgs {
         let Self {
             path,
             method,
+            embed,
             middlewares
         } = self;
 
@@ -173,6 +188,10 @@ impl ToTokens for ServerFnArgs {
         if let Some(method) = method {
             let method = LitStr::new(&method.to_string(), method.span());
             args.push(parse_quote! { method = #method });
+        }
+
+        if let Some(embed) = embed {
+            args.push(parse_quote! { embed = #embed });
         }
 
         if !middlewares.is_empty() {
@@ -204,15 +223,19 @@ mod test {
             let tokens = quote! {
                 path = "/test",
                 method = #method,
+                embed = "/test",
                 middlewares = [
                     after_routing(fn_after),
                     before_routing(fn_before)
                 ]
             };
+
             let server_fn_args: ServerFnArgs = syn::parse2(tokens.clone()).unwrap();
+
             let expected = ServerFnArgs {
                 path: parse_quote!("/test"),
                 method: Some(Ident::new(method, Span::call_site())),
+                embed: parse_quote!("/test"),
                 middlewares: vec![
                     parse_quote!(after_routing(fn_after)),
                     parse_quote!(before_routing(fn_before)),

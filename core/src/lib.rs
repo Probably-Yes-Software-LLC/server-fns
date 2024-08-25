@@ -1,3 +1,4 @@
+pub mod embed_asset;
 mod macro_traits;
 pub mod middleware;
 mod parse;

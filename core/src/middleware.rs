@@ -4,7 +4,7 @@ use syn::{parse_quote_spanned, spanned::Spanned, ItemFn};
 
 use crate::{http_methods, parse::ServerFnArgs};
 
-pub struct MiddlewareImpl(pub Span, pub ItemFn);
+pub(crate) struct MiddlewareImpl(pub Span, pub ItemFn);
 
 impl MiddlewareImpl {
     pub fn try_new(args: TokenStream2, mut server_fn: ItemFn) -> Result<Self, syn::Error> {

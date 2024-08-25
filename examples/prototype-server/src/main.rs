@@ -38,8 +38,13 @@ async fn test_middleware2(request: Request, next: Next) -> Response {
 
 #[middleware(axum::middleware::from_fn(test_middleware))]
 #[middleware(axum::middleware::from_fn(test_middleware2))]
-#[get(path = "/")]
+#[get(path = "/", embed = "$CARGO_MANIFEST_DIR/..")]
 async fn index(#[state] AppState { inner }: AppState) -> Html<String> {
     let html = format!("<body>index and {inner:?}</body>");
+
+    let path = "asset/something/else.ts";
+
+    let test = load_asset!(path);
+
     Html(html)
 }

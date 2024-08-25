@@ -2,8 +2,8 @@ use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{format_ident, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{
     self, parse_quote, parse_quote_spanned, punctuated::Punctuated, spanned::Spanned, token::Comma,
-    Attribute, Block, Expr, FnArg, Generics, Ident, ItemConst, ItemFn, LitStr, PatType, Receiver,
-    ReturnType, Token, Type, WherePredicate
+    Attribute, Block, Expr, ExprMacro, FnArg, Generics, Ident, ItemConst, ItemFn, LitStr, PatType,
+    Receiver, ReturnType, Token, Type, WherePredicate
 };
 
 use crate::parse::ServerFnArgs;
@@ -69,6 +69,7 @@ mod server_fn_impl {
             let ServerFnArgs {
                 path,
                 method,
+                embed,
                 middlewares
             } = fn_args;
 
@@ -128,7 +129,7 @@ mod server_fn_impl {
                 fn_ident
             )?;
 
-            let inner_handler = InnerHandler::try_new(server_fn)?;
+            let inner_handler = InnerHandler::try_new(embed, server_fn)?;
 
             Ok(Self {
                 span,
@@ -153,7 +154,7 @@ mod server_fn_impl {
             } = self;
 
             tokens.append_all(quote_spanned! { *span =>
-                #[allow(unused)]
+                #[allow(unused, clippy::redundant_static_lifetimes)]
                 #route_const
 
                 #[cfg(feature = "server")]
@@ -351,10 +352,18 @@ mod stateful_handler {
 }
 
 mod inner_handler {
+    use std::{
+        env,
+        path::{PathBuf, MAIN_SEPARATOR}
+    };
+
+    use itertools::Itertools;
+    use syn::{Local, LocalInit, Macro, PatMacro, Stmt};
+
     use super::*;
 
     impl InnerHandler {
-        pub fn try_new(mut handler_fn: ItemFn) -> Result<Self, syn::Error> {
+        pub fn try_new(embed: Option<LitStr>, mut handler_fn: ItemFn) -> Result<Self, syn::Error> {
             let state_attr = state_attr();
             let span = handler_fn.span();
 
@@ -366,6 +375,85 @@ mod inner_handler {
                         arg.attrs.retain(|attr| attr != &state_attr);
                     }
                 }
+            }
+
+            for statement in &mut handler_fn.block.stmts {
+                #[allow(clippy::single_match)]
+                let (expr, tokens) = match statement {
+                    Stmt::Local(Local {
+                        init: Some(LocalInit { expr, .. }),
+                        ..
+                    }) => {
+                        let Expr::Macro(ExprMacro {
+                            mac: Macro { path, tokens, .. },
+                            ..
+                        }) = expr.as_ref()
+                        else {
+                            continue;
+                        };
+
+                        if !path.is_ident(stringify!(load_asset)) {
+                            continue;
+                        }
+
+                        let tokens = tokens.clone();
+
+                        (expr, tokens)
+                    }
+                    _ => continue
+                };
+
+                let path_base = embed
+                    .as_ref()
+                    .map(|path| path.value())
+                    .ok_or_else(|| {
+                        syn::Error::new(span, "Missing `embed` parameter to server attribute")
+                    })?
+                    .split(MAIN_SEPARATOR)
+                    .map(|comp| {
+                        let Some(path) = comp.strip_prefix('$') else {
+                            return Ok(comp.to_owned());
+                        };
+
+                        env::var(path)
+                    })
+                    .try_collect::<_, PathBuf, _>()
+                    .map_err(|err| {
+                        syn::Error::new(span, format!("Failed to resolve env var in path; {err}"))
+                    })?;
+
+                let canonical_base = path_base
+                    .canonicalize()
+                    .map_err(|err| {
+                        syn::Error::new(
+                            span,
+                            format!("Failed to canonicalize path {}; {err}", path_base.display())
+                        )
+                    })?
+                    .display()
+                    .to_string();
+
+                *expr = parse_quote_spanned! { span =>
+                    {
+                        #[cfg(debug_assertions)]
+                        let embedded_asset = ::server_fns::__load_asset! {
+                            FileAsset {
+                                base: #canonical_base,
+                                path: #tokens,
+                            }
+                        };
+
+                        #[cfg(not(debug_assertions))]
+                        let embedded_asset = ::server_fns::__load_asset! {
+                            StaticAsset {
+                                base: #canonical_base,
+                                path: #tokens,
+                            }
+                        };
+
+                        embedded_asset
+                    }
+                };
             }
 
             Ok(Self { span, handler_fn })
