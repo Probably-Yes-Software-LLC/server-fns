@@ -1,17 +1,17 @@
 use std::{
-    env, io,
-    path::{Component, Path, PathBuf, MAIN_SEPARATOR}
+    io,
+    path::{Component, Path, PathBuf}
 };
 
+use axum::{
+    http::{header::CONTENT_TYPE, StatusCode},
+    response::{IntoResponse, Response}
+};
 use bytes::Bytes;
 use itertools::Itertools;
-use mime_guess::Mime;
 use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens, TokenStreamExt};
-use syn::{
-    parse_quote_spanned, spanned::Spanned, Expr, ExprLit, ExprStruct, Ident, ItemStruct, Lit,
-    Member
-};
+use syn::{spanned::Spanned, Expr, ExprLit, ExprStruct, Ident, Lit, Member};
 use thiserror::Error;
 use tokio::fs;
 
@@ -25,7 +25,8 @@ pub struct EmbeddedAsset {
 pub enum AssetError {
     #[error("Failed to read file at ({0})")]
     FileIO(String, #[source] io::Error),
-    #[error("No data found for asset ({0})")]
+
+    #[error("Asset Not Found ({0})")]
     NotFound(String)
 }
 
@@ -34,7 +35,7 @@ impl EmbeddedAsset {
         Self::default()
     }
 
-    pub async fn __from_file(path: &Path) -> Result<Self, AssetError> {
+    pub async fn __try_from_file(path: &Path) -> Result<Self, AssetError> {
         let name = path.display().to_string();
         let bytes = fs::read(path)
             .await
@@ -44,7 +45,7 @@ impl EmbeddedAsset {
         Ok(Self::new(bytes, mime.first()))
     }
 
-    pub fn __from_static(data: &'static [u8], mime: Option<&'static str>) -> Self {
+    pub fn __try_from_static(data: &'static [u8], mime: Option<&'static str>) -> Self {
         Self::new(data, mime)
     }
 
@@ -67,6 +68,31 @@ macro_rules! load_asset {
     ($($tt:tt)+) => {
         $crate::embed_asset::EmbeddedAsset::__inject_embedded_asset($($tt)+)
     };
+}
+
+impl IntoResponse for EmbeddedAsset {
+    fn into_response(self) -> Response {
+        match self {
+            Self {
+                data,
+                content_type: Some(mime)
+            } => ([(CONTENT_TYPE, mime)], data).into_response(),
+            Self {
+                data,
+                content_type: None
+            } => data.into_response()
+        }
+    }
+}
+
+impl IntoResponse for AssetError {
+    fn into_response(self) -> Response {
+        let Self::FileIO(_, source) = &self else {
+            return (StatusCode::NOT_FOUND, self.to_string()).into_response();
+        };
+
+        (StatusCode::NOT_FOUND, format!("{self}\nDebug: {source}")).into_response()
+    }
 }
 
 pub(crate) struct LoadAssetImpl {
@@ -243,7 +269,7 @@ fn file_asset_to_tokens(tokens: &mut TokenStream, span: &Span, base: &String, pa
                 let base = #base;
                 let path = &#path;
                 let file_path = PathBuf::from(base).join(path);
-                EmbeddedAsset::__from_file(&file_path).await
+                EmbeddedAsset::__try_from_file(&file_path).await
             }
         }
     });
@@ -261,10 +287,10 @@ fn static_asset_to_tokens(
          }| {
             match mime {
                 Some(mime) => quote_spanned! { *span =>
-                    #path => Ok(EmbeddedAsset::__from_static(#ident, Some(#mime)))
+                    #path => Ok(EmbeddedAsset::__try_from_static(#ident, Some(#mime)))
                 },
                 None => quote_spanned! { *span =>
-                    #path => Ok(EmbeddedAsset::__from_static(#ident, None))
+                    #path => Ok(EmbeddedAsset::__try_from_static(#ident, None))
                 }
             }
         }

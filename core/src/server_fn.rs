@@ -215,18 +215,22 @@ mod router_fn {
                 -> ::server_fns::axum::Router<State>
             };
 
-            let block = parse_quote_spanned! { span => {
-                let router = ::server_fns::axum::Router::new().route(
-                    #http_path,
-                    ::server_fns::axum::routing::#http_method(#handler_ident)
-                );
+            let block = parse_quote_spanned! { span =>
+                {
+                    use ::server_fns::axum::Router;
+                    use ::server_fns::axum::routing;
 
-                #(
-                    ::server_fns::layer_middleware!(#middlewares for router);
-                )*
+                    #[allow(clippy::let_and_return)]
+                    let router = Router::new()
+                        .route(#http_path, routing::#http_method(#handler_ident));
 
-                router
-            }};
+                    #(
+                        ::server_fns::layer_middleware!(#middlewares for router);
+                    )*
+
+                    router
+                }
+            };
 
             let pkg_server_state = make_server_state(current_package(span)?);
             let register_route = parse_quote_spanned! { span =>
@@ -345,8 +349,9 @@ mod stateful_handler {
                 block
             } = self;
 
-            tokens
-                .append_all(quote_spanned! { *span => pub async fn #ident (#args) #output #block });
+            tokens.append_all(quote_spanned! { *span =>
+                pub async fn #ident (#args) #output #block
+            });
         }
     }
 }
@@ -436,6 +441,7 @@ mod inner_handler {
                 *expr = parse_quote_spanned! { span =>
                     {
                         #[cfg(debug_assertions)]
+                        #[allow(clippy::let_and_return)]
                         let embedded_asset = ::server_fns::__load_asset! {
                             FileAsset {
                                 base: #canonical_base,
@@ -444,6 +450,7 @@ mod inner_handler {
                         };
 
                         #[cfg(not(debug_assertions))]
+                        #[allow(clippy::let_and_return)]
                         let embedded_asset = ::server_fns::__load_asset! {
                             StaticAsset {
                                 base: #canonical_base,
