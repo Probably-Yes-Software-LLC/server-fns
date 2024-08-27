@@ -158,7 +158,7 @@ mod server_fn_impl {
                 #route_const
 
                 #[cfg(feature = "server")]
-                pub mod #router_mod {
+                mod #router_mod {
                     use super::*;
 
                     #router_fn
@@ -269,7 +269,7 @@ mod router_fn {
             let (_, gen_types, where_clause) = gens.split_for_impl();
 
             tokens.append_all(quote_spanned! { *span =>
-                pub fn #ident #gen_types () #output
+                fn #ident #gen_types () #output
                 #where_clause
                 #block
 
@@ -350,7 +350,7 @@ mod stateful_handler {
             } = self;
 
             tokens.append_all(quote_spanned! { *span =>
-                pub async fn #ident (#args) #output #block
+                async fn #ident (#args) #output #block
             });
         }
     }
@@ -359,11 +359,12 @@ mod stateful_handler {
 mod inner_handler {
     use std::{
         env,
+        ops::DerefMut,
         path::{PathBuf, MAIN_SEPARATOR}
     };
 
     use itertools::Itertools;
-    use syn::{Local, LocalInit, Macro, PatMacro, Stmt};
+    use syn::{Local, LocalInit, Macro, Stmt};
 
     use super::*;
 
@@ -383,8 +384,7 @@ mod inner_handler {
             }
 
             for statement in &mut handler_fn.block.stmts {
-                #[allow(clippy::single_match)]
-                let (expr, tokens) = match statement {
+                let (expr, mut runtime_lookup_path) = match statement {
                     Stmt::Local(Local {
                         init: Some(LocalInit { expr, .. }),
                         ..
@@ -393,6 +393,23 @@ mod inner_handler {
                             mac: Macro { path, tokens, .. },
                             ..
                         }) = expr.as_ref()
+                        else {
+                            continue;
+                        };
+
+                        if !path.is_ident(stringify!(load_asset)) {
+                            continue;
+                        }
+
+                        let tokens = tokens.clone();
+
+                        (expr.deref_mut(), tokens)
+                    }
+                    Stmt::Expr(expr, _) => {
+                        let Expr::Macro(ExprMacro {
+                            mac: Macro { path, tokens, .. },
+                            ..
+                        }) = &expr
                         else {
                             continue;
                         };
@@ -427,16 +444,21 @@ mod inner_handler {
                         syn::Error::new(span, format!("Failed to resolve env var in path; {err}"))
                     })?;
 
-                let canonical_base = path_base
-                    .canonicalize()
-                    .map_err(|err| {
-                        syn::Error::new(
-                            span,
-                            format!("Failed to canonicalize path {}; {err}", path_base.display())
-                        )
-                    })?
-                    .display()
-                    .to_string();
+                let mut canonical_base = path_base.canonicalize().map_err(|err| {
+                    syn::Error::new(
+                        span,
+                        format!("Failed to canonicalize path {}; {err}", path_base.display())
+                    )
+                })?;
+
+                if canonical_base.is_file() {
+                    let file_name = canonical_base.file_name().and_then(|os| os.to_str());
+                    runtime_lookup_path = quote_spanned! { span => #file_name };
+
+                    canonical_base.pop();
+                }
+
+                let canonical_base = canonical_base.display().to_string();
 
                 *expr = parse_quote_spanned! { span =>
                     {
@@ -445,7 +467,7 @@ mod inner_handler {
                         let embedded_asset = ::server_fns::__load_asset! {
                             FileAsset {
                                 base: #canonical_base,
-                                path: #tokens,
+                                path: #runtime_lookup_path,
                             }
                         };
 
@@ -454,7 +476,7 @@ mod inner_handler {
                         let embedded_asset = ::server_fns::__load_asset! {
                             StaticAsset {
                                 base: #canonical_base,
-                                path: #tokens,
+                                path: #runtime_lookup_path,
                             }
                         };
 
