@@ -1,3 +1,5 @@
+#![cfg(feature = "server")]
+
 use inventory::Collect;
 
 use crate::server_state::ServerState;

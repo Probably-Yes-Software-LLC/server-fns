@@ -3,6 +3,7 @@ use std::{
     path::{Component, Path, PathBuf}
 };
 
+#[cfg(feature = "server")]
 use axum::{
     http::{header::CONTENT_TYPE, StatusCode},
     response::{IntoResponse, Response}
@@ -13,6 +14,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::{format_ident, quote, quote_spanned, ToTokens, TokenStreamExt};
 use syn::{spanned::Spanned, Expr, ExprLit, ExprStruct, Ident, Lit, Member};
 use thiserror::Error;
+#[cfg(feature = "server")]
 use tokio::fs;
 
 #[derive(Debug, Default, Clone)]
@@ -35,6 +37,7 @@ impl EmbeddedAsset {
         Self::default()
     }
 
+    #[cfg(feature = "server")]
     pub async fn __try_from_file(path: &Path) -> Result<Self, AssetError> {
         let name = path.display().to_string();
         let bytes = fs::read(path)
@@ -70,6 +73,7 @@ macro_rules! load_asset {
     };
 }
 
+#[cfg(feature = "server")]
 impl IntoResponse for EmbeddedAsset {
     fn into_response(self) -> Response {
         match self {
@@ -85,6 +89,7 @@ impl IntoResponse for EmbeddedAsset {
     }
 }
 
+#[cfg(feature = "server")]
 impl IntoResponse for AssetError {
     fn into_response(self) -> Response {
         let Self::FileIO(_, source) = &self else {
@@ -121,6 +126,33 @@ impl AssetType {
 
     fn static_(base: impl AsRef<Path>) -> Result<Self, syn::Error> {
         let base = base.as_ref();
+
+        if base.is_file() {
+            let file_name = base
+                .file_name()
+                .and_then(|os| os.to_str())
+                .map(ToString::to_string)
+                .ok_or_else(|| syn::Error::new(Span::call_site(), "Failed to get file name"))?;
+
+            let ident = format_ident!(
+                "{}",
+                file_name.replace(|char_| ['.', '-'].contains(&char_), "_")
+            );
+
+            let mime = mime_guess::from_path(base)
+                .first()
+                .as_ref()
+                .map(ToString::to_string);
+
+            let files = vec![StaticAsset {
+                ident,
+                full: base.display().to_string(),
+                path: file_name,
+                mime
+            }];
+
+            return Ok(Self::StaticAsset(files));
+        }
 
         let files = recurse_all_files(base).map_err(|err| {
             syn::Error::new(
@@ -264,10 +296,12 @@ fn file_asset_to_tokens(tokens: &mut TokenStream, span: &Span, base: &String, pa
         ::server_fns::load_asset! {
             @IDENTITY {
                 use ::std::path::PathBuf;
+                use ::std::string::ToString;
                 use ::server_fns::embed_asset::EmbeddedAsset;
 
                 let base = #base;
-                let path = &#path;
+                let path = #path;
+                let path = ToString::to_string(&path);
                 let file_path = PathBuf::from(base).join(path);
                 EmbeddedAsset::__try_from_file(&file_path).await
             }
@@ -299,13 +333,16 @@ fn static_asset_to_tokens(
     tokens.append_all(quote_spanned! { *span =>
         ::server_fns::load_asset! {
             @IDENTITY {
+                use ::std::string::ToString;
                 use ::server_fns::embed_asset::EmbeddedAsset;
                 use ::server_fns::embed_asset::AssetError;
 
                 #(#static_assets)*
 
-                match &#path {
-                    #(#matchers),*
+                let path = #path;
+                let path = ToString::to_string(&path);
+                match path.as_str() {
+                    #(#matchers,)*
                     unknown => Err(AssetError::NotFound(unknown.to_string()))
                 }
             }

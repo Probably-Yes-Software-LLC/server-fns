@@ -42,9 +42,9 @@ async fn test_middleware2(request: Request, next: Next) -> Response {
 async fn index(#[state] AppState { inner }: AppState) -> Html<String> {
     let html = format!("<body>index and {inner:?}</body>");
 
-    let path = "asset/something/else.ts";
+    // let path = "asset/something/else.ts";
 
-    let test = load_asset!(path);
+    let test = load_asset!("/test");
 
     Html(html)
 }

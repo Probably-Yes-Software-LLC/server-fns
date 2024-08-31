@@ -4,8 +4,10 @@ name = "server-fns-core"
 edition.workspace = true
 version.workspace = true
 
+[features]
+server = ["dep:axum", "dep:tokio"]
+
 [dependencies]
-axum.workspace             = true
 bytes.workspace            = true
 convert_case.workspace     = true
 deluxe.workspace           = true
@@ -27,8 +29,13 @@ syn = { workspace = true, features = [
     "printing",
 ] }
 
+[dependencies.axum]
+optional  = true
+workspace = true
+
 [dependencies.tokio]
 features  = ["fs", "rt-multi-thread"]
+optional  = true
 workspace = true
 
 [dev-dependencies]

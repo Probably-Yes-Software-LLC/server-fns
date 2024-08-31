@@ -5,9 +5,9 @@ edition.workspace = true
 version.workspace = true
 
 [features]
-default = ["server", "web"]
-server  = ["dep:axum", "dep:inventory"]
-web     = ["dep:gloo-net"]
+# default = ["server", "web"]
+server = ["dep:axum", "dep:inventory", "server-fns-core/server"]
+web    = ["dep:gloo-net"]
 
 [dependencies]
 axum             = { workspace = true, optional = true }

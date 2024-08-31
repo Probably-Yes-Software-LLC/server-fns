@@ -384,7 +384,7 @@ mod inner_handler {
             }
 
             for statement in &mut handler_fn.block.stmts {
-                let (expr, mut runtime_lookup_path) = match statement {
+                let (expr, runtime_lookup_path) = match statement {
                     Stmt::Local(Local {
                         init: Some(LocalInit { expr, .. }),
                         ..
@@ -444,21 +444,25 @@ mod inner_handler {
                         syn::Error::new(span, format!("Failed to resolve env var in path; {err}"))
                     })?;
 
-                let mut canonical_base = path_base.canonicalize().map_err(|err| {
+                let canonical_base = path_base.canonicalize().map_err(|err| {
                     syn::Error::new(
                         span,
                         format!("Failed to canonicalize path {}; {err}", path_base.display())
                     )
                 })?;
 
-                if canonical_base.is_file() {
+                let (path, dbg_base, rel_base) = if canonical_base.is_file() {
                     let file_name = canonical_base.file_name().and_then(|os| os.to_str());
-                    runtime_lookup_path = quote_spanned! { span => #file_name };
 
-                    canonical_base.pop();
-                }
+                    let path = quote_spanned! { span => #file_name };
+                    let dbg_base = canonical_base.parent().and_then(|p| p.to_str());
+                    let rel_base = canonical_base.to_str();
 
-                let canonical_base = canonical_base.display().to_string();
+                    (path, dbg_base, rel_base)
+                } else {
+                    let base = canonical_base.to_str();
+                    (runtime_lookup_path, base, base)
+                };
 
                 *expr = parse_quote_spanned! { span =>
                     {
@@ -466,8 +470,8 @@ mod inner_handler {
                         #[allow(clippy::let_and_return)]
                         let embedded_asset = ::server_fns::__load_asset! {
                             FileAsset {
-                                base: #canonical_base,
-                                path: #runtime_lookup_path,
+                                base: #dbg_base,
+                                path: #path,
                             }
                         };
 
@@ -475,8 +479,8 @@ mod inner_handler {
                         #[allow(clippy::let_and_return)]
                         let embedded_asset = ::server_fns::__load_asset! {
                             StaticAsset {
-                                base: #canonical_base,
-                                path: #runtime_lookup_path,
+                                base: #rel_base,
+                                path: #path,
                             }
                         };
 
