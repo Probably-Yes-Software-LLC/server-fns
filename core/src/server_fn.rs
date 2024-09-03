@@ -96,7 +96,7 @@ mod server_fn_impl {
             );
 
             let route_const = parse_quote_spanned! { fn_ident.span() =>
-                const #route_const_ident: &'static str = #http_path;
+                pub const #route_const_ident: &'static str = #http_path;
             };
 
             let args_span = server_fn.sig.inputs.span();
