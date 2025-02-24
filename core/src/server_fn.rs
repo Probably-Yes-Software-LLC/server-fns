@@ -444,12 +444,10 @@ mod inner_handler {
                         syn::Error::new(span, format!("Failed to resolve env var in path; {err}"))
                     })?;
 
-                let canonical_base = path_base.canonicalize().map_err(|err| {
-                    syn::Error::new(
-                        span,
-                        format!("Failed to canonicalize path {}; {err}", path_base.display())
-                    )
-                })?;
+                let canonical_base = match path_base.canonicalize() {
+                    Ok(base) => base,
+                    Err(_) => continue
+                };
 
                 let (path, dbg_base, rel_base) = if canonical_base.is_file() {
                     let file_name = canonical_base.file_name().and_then(|os| os.to_str());

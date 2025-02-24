@@ -27,45 +27,13 @@ pub struct ServerFnAttrMacro;
 
 impl AttrMacro for ServerFnAttrMacro {
     type TokenStream = TokenStream2;
-    type Error = TokenStream2;
+    type Error = syn::Error;
     type Result = Result<Self::TokenStream, Self::Error>;
 
     fn transform2(&self, args: Self::TokenStream, body: Self::TokenStream) -> Self::Result {
-        let annotated_fn = match syn::parse2::<ItemFn>(body.clone()) {
-            Ok(fun) => fun,
-            Err(err) => {
-                let error = format!("Invalid server_fn input; {err:?}");
-
-                return Err(quote! {
-                    const SERVER_ATTR_ERROR: [&'static str; 0] = [#error];
-                    #body
-                });
-            }
-        };
-
-        let args = match syn::parse2(args) {
-            Ok(args) => args,
-            Err(err) => {
-                let error = format!("Invalid server_fn args; {err:?}");
-
-                return Err(quote! {
-                    const SERVER_ATTR_ERROR: [&'static str; 0] = [#error];
-                    #body
-                });
-            }
-        };
-
-        let server_fn = match ServerFn::try_new(args, annotated_fn) {
-            Ok(fun) => fun,
-            Err(err) => {
-                let error = format!("Error constructing server function route; {err:?}");
-
-                return Err(quote! {
-                    const SERVER_ATTR_ERROR: [&'static str; 0] = [#error];
-                    #body
-                });
-            }
-        };
+        let annotated_fn: ItemFn = syn::parse2(body)?;
+        let args: ServerFnArgs = syn::parse2(args)?;
+        let server_fn = ServerFn::try_new(args, annotated_fn)?;
 
         Ok(quote!(#server_fn))
     }
@@ -79,17 +47,7 @@ impl AttrMacro for ServerFnMethodAttr {
     type Result = <ServerFnAttrMacro as AttrMacro>::Result;
 
     fn transform2(&self, args: Self::TokenStream, body: Self::TokenStream) -> Self::Result {
-        let mut args: ServerFnArgs = match syn::parse2(args) {
-            Ok(args) => args,
-            Err(err) => {
-                let error = format!("Invalid server_fn args; {err:?}");
-
-                return Err(quote! {
-                    const SERVER_ATTR_ERROR: [&'static str; 0] = [#error];
-                    #body
-                });
-            }
-        };
+        let mut args: ServerFnArgs = syn::parse2(args)?;
 
         // Set (or override) the method to the method macro used instead.
         args.method = Some(Ident::new(self.0.as_ref(), body.span()));
@@ -102,33 +60,12 @@ pub struct MiddlewareAttrMacro;
 
 impl AttrMacro for MiddlewareAttrMacro {
     type TokenStream = TokenStream2;
-    type Error = TokenStream2;
+    type Error = syn::Error;
     type Result = Result<Self::TokenStream, Self::Error>;
 
     fn transform2(&self, args: Self::TokenStream, body: Self::TokenStream) -> Self::Result {
-        let annotated_fn = match syn::parse2::<ItemFn>(body.clone()) {
-            Ok(fun) => fun,
-            Err(err) => {
-                let error = format!("Invalid middleware input; {err:?}");
-
-                return Err(quote! {
-                    const MIDDLEWARE_ATTR_ERROR: [&'static str; 0] = [#error];
-                    #body
-                });
-            }
-        };
-
-        let middleware = match MiddlewareImpl::try_new(args, annotated_fn) {
-            Ok(middleware) => middleware,
-            Err(err) => {
-                let error = format!("Invalid middleware input; {err:?}");
-
-                return Err(quote! {
-                    const MIDDLEWARE_ATTR_ERROR: [&'static str; 0] = [#error];
-                    #body
-                });
-            }
-        };
+        let annotated_fn: ItemFn = syn::parse2(body)?;
+        let middleware = MiddlewareImpl::try_new(args, annotated_fn)?;
 
         Ok(quote!(#middleware))
     }
