@@ -1,6 +1,6 @@
 use proc_macro2::{Span, TokenStream as TokenStream2};
 use quote::{quote_spanned, ToTokens, TokenStreamExt};
-use syn::{parse_quote_spanned, spanned::Spanned, ItemFn};
+use syn::{parse_quote_spanned, spanned::Spanned, ItemFn, Meta};
 
 use crate::{http_methods, parse::ServerFnArgs};
 
@@ -48,7 +48,11 @@ impl MiddlewareImpl {
 
         // Parse out the server function arguments so the middleware expression can be added back in.
         let server_attr_span = server_attr.span();
-        let attr_args = server_attr.parse_args::<ServerFnArgs>();
+        let attr_args = if let Meta::Path(_) = &server_attr.meta {
+            Ok(Default::default())
+        } else {
+            server_attr.parse_args::<ServerFnArgs>()
+        };
         let mut attr_args = match attr_args {
             Ok(attr_args) => attr_args,
             Err(mut err) => {
