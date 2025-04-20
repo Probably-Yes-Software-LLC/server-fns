@@ -11,6 +11,7 @@ use crate::parse::ServerFnArgs;
 pub struct ServerFn {
     pub span: Span,
     pub route_const: ItemConst,
+    pub format_url_fn: ItemFn,
     pub router_mod: Ident,
     pub router_fn: RouterFn,
     pub stateful_handler: StatefulHandler,
@@ -58,6 +59,7 @@ fn make_where_predicate(span: Span, arg_type: &Type) -> WherePredicate {
 
 mod server_fn_impl {
     use convert_case::{Case, Casing};
+    use itertools::Itertools;
 
     use super::*;
 
@@ -87,6 +89,35 @@ mod server_fn_impl {
                 )
             });
 
+            let http_path_str = http_path.value();
+            let mut route_parts = http_path_str.split('/').collect_vec();
+
+            let format_url_params = route_parts
+                .iter()
+                .enumerate()
+                .filter_map(|(i, p)| {
+                    p.strip_prefix(':').map(|param| {
+                        let param = format_ident!("{param}");
+                        let pat_type = parse_quote_spanned! { http_path.span() =>
+                            #param: impl ::std::fmt::Display
+                        };
+                        (i, param, pat_type)
+                    })
+                })
+                .collect::<Vec<(_, _, PatType)>>();
+
+            for (index, _, _) in &format_url_params {
+                route_parts[*index] = "{}";
+            }
+
+            let format_url_param_count = format_url_params.len();
+
+            let (format_url_param_names, format_url_params): (Vec<_>, Vec<_>) = format_url_params
+                .into_iter()
+                .map(|(_, n, p)| (n, p))
+                .unzip();
+            let format_url_fmt_str = route_parts.join("/");
+
             let router_fn_ident = format_ident!("{fn_ident}_router");
             let router_mod_ident = format_ident!("__{router_fn_ident}");
             let stateful_fn_ident = format_ident!("{http_method}_{fn_ident}");
@@ -94,9 +125,20 @@ mod server_fn_impl {
                 "{}",
                 stateful_fn_ident.to_string().to_case(Case::UpperSnake)
             );
+            let format_url_fn_ident = format_ident!("{stateful_fn_ident}_url");
 
             let route_const = parse_quote_spanned! { fn_ident.span() =>
                 pub const #route_const_ident: &'static str = #http_path;
+            };
+
+            let format_url_fn: ItemFn = parse_quote_spanned! { http_path.span() =>
+                pub fn #format_url_fn_ident(#(#format_url_params),*) -> String {
+                    if #format_url_param_count > 0 {
+                        ::std::format!(#format_url_fmt_str, #(#format_url_param_names),*)
+                    } else {
+                        #format_url_fmt_str.into()
+                    }
+                }
             };
 
             let args_span = server_fn.sig.inputs.span();
@@ -134,6 +176,7 @@ mod server_fn_impl {
             Ok(Self {
                 span,
                 route_const,
+                format_url_fn,
                 router_mod: router_mod_ident,
                 router_fn,
                 stateful_handler,
@@ -147,6 +190,7 @@ mod server_fn_impl {
             let Self {
                 span,
                 route_const,
+                format_url_fn,
                 router_mod,
                 router_fn,
                 stateful_handler,
@@ -156,6 +200,8 @@ mod server_fn_impl {
             tokens.append_all(quote_spanned! { *span =>
                 #[allow(unused, clippy::redundant_static_lifetimes)]
                 #route_const
+
+                #format_url_fn
 
                 #[cfg(feature = "server")]
                 mod #router_mod {
