@@ -201,6 +201,7 @@ mod server_fn_impl {
                 #[allow(unused, clippy::redundant_static_lifetimes)]
                 #route_const
 
+                #[allow(unused, clippy::useless_format)]
                 #format_url_fn
 
                 #[cfg(feature = "server")]
