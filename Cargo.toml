@@ -16,7 +16,7 @@ version = "0.1.0"
 
 [workspace.dependencies]
 axum              = { version = "0.7", default-features = false }
-bytes             = "1.7.1"
+bytes             = "1.11.1"
 convert_case      = "0.6.0"
 deluxe            = "0.5.0"
 derive-syn-parse  = "0.2.0"
